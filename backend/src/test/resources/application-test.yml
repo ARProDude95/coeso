@@ -1,0 +1,33 @@
+spring:
+  datasource:
+    # Used only when Docker is unavailable (Testcontainers is the default and
+    # overrides these via @DynamicPropertySource). The test database is wiped
+    # and re-migrated on every run.
+    url: ${ROSTER_TEST_DB_URL:jdbc:mysql://localhost:3306/roster_test?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8}
+    username: ${ROSTER_TEST_DB_USER:roster}
+    password: ${ROSTER_TEST_DB_PASSWORD:roster}
+  flyway:
+    clean-disabled: false
+    clean-on-migrate: true
+
+app:
+  jwt:
+    secret: test-secret-for-integration-tests-0123456789abcdef
+    ttl-minutes: 60
+  discord:
+    # Non-empty so the "configured" paths are exercised; all Discord HTTP
+    # calls go through the stubbed DiscordApiClient, never to Discord.
+    client-id: test-client-id
+    client-secret: test-client-secret
+    bot-token: ""
+  billing:
+    provider: stripe
+    stripe:
+      # No secret-key: checkout answers 503 in tests (asserted explicitly).
+      secret-key: ""
+      webhook-secret: whsec_test_secret_for_signature_checks
+
+logging:
+  level:
+    com.coeso.roster: info
+    org.hibernate.SQL: warn
