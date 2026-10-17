@@ -32,7 +32,17 @@ export default function Modal({
       }}
     >
       <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
-        <h2>{title}</h2>
+        <div className="modal-head">
+          <h2>{title}</h2>
+          <button
+            type="button"
+            className="modal-close"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
         {children}
       </div>
     </div>

@@ -16,7 +16,10 @@ export default function PricingPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1>Pricing</h1>
+        <div>
+          <h1>Pricing</h1>
+          <p className="page-sub">Per-workspace plans that scale with your roster.</p>
+        </div>
       </div>
       <p className="muted" style={{ marginTop: '-0.75rem', marginBottom: '1.5rem' }}>
         Plans are per workspace. Upgrades and downgrades are managed by the

@@ -74,6 +74,18 @@ export interface Rep {
   offerId: number | null;
   offerTitle: string | null;
   clientName: string | null;
+  /** Days on the bench (since last ended placement / joined date);
+   *  null while placed. */
+  benchDays: number | null;
+  // Phase 6 profile (optional so older payloads still type-check)
+  bio?: string | null;
+  timezone?: string | null;
+  hoursPerWeek?: number | null;
+  availableFrom?: string | null;
+  skills?: string[];
+  languages?: string[];
+  preferredVerticalIds?: number[];
+  hasPhoto?: boolean;
 }
 
 export interface RepPage {
@@ -92,6 +104,14 @@ export interface RepInput {
   experienceLevelId?: number | null;
   notes?: string | null;
   joinedDate?: string | null;
+  // Phase 6 profile
+  bio?: string | null;
+  timezone?: string | null;
+  hoursPerWeek?: number | null;
+  availableFrom?: string | null;
+  skills?: string[];
+  languages?: string[];
+  preferredVerticalIds?: number[];
 }
 
 export interface Client {
@@ -116,6 +136,14 @@ export interface Offer {
   status: 'OPEN' | 'CLOSED';
   effectiveStatus: 'OPEN' | 'FILLED' | 'CLOSED';
   reps: { repId: number; repName: string }[];
+  // Phase 6 requirements (undefined on older payloads)
+  requiredLevelId?: number | null;
+  requiredLevelName?: string | null;
+  requiredLanguage?: string | null;
+  tzWindowStart?: number | null;
+  tzWindowEnd?: number | null;
+  startDate?: string | null;
+  requiredSkills?: string[];
 }
 
 export interface OfferInput {
@@ -126,6 +154,44 @@ export interface OfferInput {
   notes?: string | null;
   opensAt?: string | null;
   closesAt?: string | null;
+  // Phase 6 requirements
+  requiredLevelId?: number | null;
+  requiredLanguage?: string | null;
+  tzWindowStart?: number | null;
+  tzWindowEnd?: number | null;
+  startDate?: string | null;
+  requiredSkills?: string[];
+}
+
+/** One factor of the match-score breakdown (points out of weight + the why). */
+export interface MatchFactor {
+  key: string;
+  label: string;
+  weight: number;
+  points: number;
+  applicable: boolean;
+  detail: string;
+}
+
+/** A rep ranked against an offer's requirements by GET /offers/{id}/suggested. */
+export interface SuggestedRep {
+  repId: number;
+  repName: string;
+  email: string | null;
+  verticalName: string | null;
+  experienceLevelName: string | null;
+  statusName: string | null;
+  benchDays: number | null;
+  hoursPerWeek: number | null;
+  timezone: string | null;
+  score: number;
+  factors: MatchFactor[];
+}
+
+export interface RepPhoto {
+  photoUrl: string;
+  contentType: string;
+  sizeBytes: number;
 }
 
 export interface Placement {
@@ -153,6 +219,9 @@ export interface RepFilters {
   statusId?: number;
   experienceId?: number;
   placed?: boolean;
+  skillId?: number;
+  language?: string;
+  available?: boolean;
   page?: number;
   size?: number;
 }
@@ -180,8 +249,10 @@ export function getActiveWorkspaceId(): number | null {
 
 async function request<T>(path: string, options: RequestInit = {},
                           workspaceScoped = true): Promise<T> {
+  // Multipart uploads must let the browser set the boundary itself.
+  const isFormData = options.body instanceof FormData;
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> | undefined),
   };
   if (authToken) {
@@ -261,6 +332,9 @@ export function listReps(filters: RepFilters) {
   if (filters.statusId != null) params.set('statusId', String(filters.statusId));
   if (filters.experienceId != null) params.set('experienceId', String(filters.experienceId));
   if (filters.placed != null) params.set('placed', String(filters.placed));
+  if (filters.skillId != null) params.set('skillId', String(filters.skillId));
+  if (filters.language) params.set('language', filters.language);
+  if (filters.available != null) params.set('available', String(filters.available));
   if (filters.page != null) params.set('page', String(filters.page));
   if (filters.size != null) params.set('size', String(filters.size));
   const qs = params.toString();
@@ -277,6 +351,50 @@ export function updateRep(id: number, input: RepInput) {
 
 export function deleteRep(id: number) {
   return request<void>(`/api/reps/${id}`, { method: 'DELETE' });
+}
+
+/**
+ * CSV export honoring the same filters as the list endpoint. The column set
+ * matches the CSV import, so an export can be edited and re-imported.
+ * Returns the raw CSV text (the caller turns it into a download).
+ */
+export async function exportRepsCsv(filters: RepFilters = {}): Promise<string> {
+  const params = new URLSearchParams();
+  if (filters.q) params.set('q', filters.q);
+  if (filters.verticalId != null) params.set('verticalId', String(filters.verticalId));
+  if (filters.statusId != null) params.set('statusId', String(filters.statusId));
+  if (filters.experienceId != null) params.set('experienceId', String(filters.experienceId));
+  if (filters.placed != null) params.set('placed', String(filters.placed));
+  if (filters.skillId != null) params.set('skillId', String(filters.skillId));
+  if (filters.language) params.set('language', filters.language);
+  if (filters.available != null) params.set('available', String(filters.available));
+  const qs = params.toString();
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  if (activeWorkspaceId != null) {
+    headers['X-Workspace'] = String(activeWorkspaceId);
+  }
+  const response = await fetch(`/api/reps/export${qs ? `?${qs}` : ''}`, { headers });
+  if (!response.ok) {
+    throw new ApiError(response.status, 'UNKNOWN',
+      `Export failed with status ${response.status}`);
+  }
+  return response.text();
+}
+
+/** Trigger a browser download for generated CSV text. */
+export function downloadCsv(filename: string, csv: string): void {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ------------------------------------------------------------------- clients
@@ -393,6 +511,360 @@ export function updateExperienceLevel(id: number, name: string) {
 
 export function deleteExperienceLevel(id: number) {
   return request<void>(`/api/experience-levels/${id}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------- skills & languages (P6)
+
+export interface SkillTag {
+  id: number;
+  name: string;
+}
+
+export function listSkills() {
+  return request<SkillTag[]>('/api/skills');
+}
+
+export function listLanguages() {
+  return request<string[]>('/api/languages');
+}
+
+// ---------------------------------------------- suggested reps (match, P6)
+
+export function fetchSuggested(offerId: number, limit = 10) {
+  return request<SuggestedRep[]>(`/api/offers/${offerId}/suggested?limit=${limit}`);
+}
+
+// ------------------------------------------------------------ profile photo
+
+/**
+ * Uploads (replaces) a rep's profile photo. Uses FormData directly so the
+ * browser sets the multipart boundary (a JSON content-type would break it).
+ */
+export function uploadRepPhoto(id: number, file: File): Promise<RepPhoto> {
+  const form = new FormData();
+  form.append('file', file);
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  if (activeWorkspaceId != null) {
+    headers['X-Workspace'] = String(activeWorkspaceId);
+  }
+  return request<RepPhoto>(`/api/reps/${id}/photo`, {
+    method: 'POST',
+    body: form,
+  });
+}
+
+/**
+ * Fetches the stored photo with the session headers (img tags cannot send a
+ * Bearer token) and returns an object URL for rendering. Callers should
+ * revoke it when done.
+ */
+export async function fetchRepPhoto(id: number): Promise<string> {
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  if (activeWorkspaceId != null) {
+    headers['X-Workspace'] = String(activeWorkspaceId);
+  }
+  const response = await fetch(`/api/reps/${id}/photo`, { headers });
+  if (!response.ok) {
+    throw new ApiError(response.status, 'UNKNOWN', `Photo fetch failed (${response.status})`);
+  }
+  return URL.createObjectURL(await response.blob());
+}
+
+// ------------------------------------------- performance (Phase 7, [PRO])
+
+export interface MetricType {
+  id: number;
+  name: string;
+  unit: 'count' | 'currency';
+}
+
+export interface LogPlacement {
+  placementId: number;
+  offerId: number;
+  offerTitle: string;
+  repId: number;
+  repName: string | null;
+}
+
+export interface ActivityEntry {
+  id: number;
+  placementId: number;
+  repId: number;
+  repName: string | null;
+  offerId: number | null;
+  offerTitle: string | null;
+  metricTypeId: number;
+  metricName: string | null;
+  metricUnit: string | null;
+  occurredOn: string;
+  valueMinor: number;
+  notes: string | null;
+  loggedBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+  canEdit: boolean;
+}
+
+export interface ActivityPage {
+  page: number;
+  size: number;
+  total: number;
+  items: ActivityEntry[];
+}
+
+export interface ActivityInput {
+  placementId: number;
+  metricTypeId: number;
+  occurredOn: string;
+  valueMinor: number;
+  notes?: string | null;
+}
+
+export interface CommissionRule {
+  id: number;
+  offerId: number | null;
+  offerTitle: string | null;
+  repId: number | null;
+  repName: string | null;
+  kind: 'percent' | 'flat' | 'tiered';
+  rateBp: number | null;
+  flatMinor: number | null;
+  currency: string | null;
+  tiers: { upToMinor: number | null; rateBp: number }[];
+}
+
+export interface CommissionRuleInput {
+  offerId?: number | null;
+  repId?: number | null;
+  kind: 'percent' | 'flat' | 'tiered';
+  rateBp?: number | null;
+  flatMinor?: number | null;
+  currency?: string | null;
+  tiers?: { upToMinor: number | null; rateBp: number }[];
+}
+
+export interface EarningsEntry {
+  id: number;
+  repId: number;
+  repName: string | null;
+  placementId: number;
+  offerId: number | null;
+  offerTitle: string | null;
+  activityEntryId: number;
+  commissionRuleId: number | null;
+  payoutId: number | null;
+  reversesEntryId: number | null;
+  status: 'accrued' | 'approved' | 'paid';
+  amountMinor: number;
+  currency: string;
+  enteredOn: string;
+  createdAt: string;
+  reversal: boolean;
+}
+
+export interface Earnings {
+  total: number;
+  netMinor: number;
+  currency: string | null;
+  items: EarningsEntry[];
+}
+
+export interface Payout {
+  id: number;
+  repId: number;
+  repName: string | null;
+  amountMinor: number;
+  currency: string;
+  entryCount: number;
+  paidOn: string;
+  referenceNote: string | null;
+  createdBy: number | null;
+  createdAt: string;
+}
+
+export interface LeaderRow {
+  rank: number;
+  repId: number | null;
+  repName: string | null;
+  value: number;
+  self: boolean;
+}
+
+export interface Leaderboard {
+  period: string;
+  metricTypeId: number;
+  metricName: string;
+  metricUnit: 'count' | 'currency';
+  from: string;
+  to: string;
+  showNames: boolean;
+  selfRank: number | null;
+  items: LeaderRow[];
+}
+
+export interface WorkspaceSettings {
+  leaderboardShowNames: boolean;
+}
+
+/** True when the backend answered 402 PRO_FEATURE_REQUIRED ([PRO] gate). */
+export function isProFeatureError(err: unknown): boolean {
+  return err instanceof ApiError && err.code === 'PRO_FEATURE_REQUIRED';
+}
+
+export function listMetricTypes() {
+  return request<MetricType[]>('/api/metric-types');
+}
+
+export function createMetricType(name: string, unit: MetricType['unit']) {
+  return request<MetricType>('/api/metric-types', {
+    method: 'POST',
+    body: JSON.stringify({ name, unit }),
+  });
+}
+
+export function deleteMetricType(id: number) {
+  return request<void>(`/api/metric-types/${id}`, { method: 'DELETE' });
+}
+
+export function activityMeta() {
+  return request<LogPlacement[]>('/api/activity/meta');
+}
+
+export interface ActivityFilters {
+  placementId?: number;
+  repId?: number;
+  metricTypeId?: number;
+  from?: string;
+  to?: string;
+  page?: number;
+  size?: number;
+}
+
+export function listActivity(filters: ActivityFilters = {}) {
+  const params = new URLSearchParams();
+  if (filters.placementId != null) params.set('placementId', String(filters.placementId));
+  if (filters.repId != null) params.set('repId', String(filters.repId));
+  if (filters.metricTypeId != null) params.set('metricTypeId', String(filters.metricTypeId));
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  if (filters.page != null) params.set('page', String(filters.page));
+  if (filters.size != null) params.set('size', String(filters.size));
+  const qs = params.toString();
+  return request<ActivityPage>(`/api/activity${qs ? `?${qs}` : ''}`);
+}
+
+export function createActivity(input: ActivityInput) {
+  return request<ActivityEntry>('/api/activity', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateActivity(id: number, patch: Partial<ActivityInput> & { notes?: string | null }) {
+  return request<ActivityEntry>(`/api/activity/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteActivity(id: number) {
+  return request<void>(`/api/activity/${id}`, { method: 'DELETE' });
+}
+
+export function listCommissionRules() {
+  return request<CommissionRule[]>('/api/commission-rules');
+}
+
+export function saveCommissionRule(rule: CommissionRuleInput) {
+  return request<CommissionRule>('/api/commission-rules', {
+    method: 'POST',
+    body: JSON.stringify(rule),
+  });
+}
+
+export function deleteCommissionRule(id: number) {
+  return request<void>(`/api/commission-rules/${id}`, { method: 'DELETE' });
+}
+
+export interface EarningsFilters {
+  repId?: number;
+  status?: string;
+  from?: string;
+  to?: string;
+}
+
+export function listEarnings(filters: EarningsFilters = {}) {
+  const params = new URLSearchParams();
+  if (filters.repId != null) params.set('repId', String(filters.repId));
+  if (filters.status) params.set('status', filters.status);
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  const qs = params.toString();
+  return request<Earnings>(`/api/earnings${qs ? `?${qs}` : ''}`);
+}
+
+export function approveEarning(id: number) {
+  return request<EarningsEntry>(`/api/earnings/${id}/approve`, { method: 'POST' });
+}
+
+export function listPayouts() {
+  return request<Payout[]>('/api/payouts');
+}
+
+export function createPayout(input: {
+  entryIds: number[];
+  paidOn: string;
+  referenceNote?: string | null;
+}) {
+  return request<Payout>('/api/payouts', { method: 'POST', body: JSON.stringify(input) });
+}
+
+/** Payout export CSV (same header/xworkspace handling as the roster export). */
+export async function exportPayoutsCsv(): Promise<string> {
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  if (activeWorkspaceId != null) {
+    headers['X-Workspace'] = String(activeWorkspaceId);
+  }
+  const response = await fetch('/api/payouts/export', { headers });
+  if (!response.ok) {
+    throw new ApiError(response.status, 'UNKNOWN',
+      `Payout export failed with status ${response.status}`);
+  }
+  return response.text();
+}
+
+export function fetchLeaderboard(params: {
+  period?: string;
+  from?: string;
+  to?: string;
+  metricTypeId: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params.period) qs.set('period', params.period);
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  qs.set('metricTypeId', String(params.metricTypeId));
+  return request<Leaderboard>(`/api/leaderboard?${qs.toString()}`);
+}
+
+export function fetchWorkspaceSettings() {
+  return request<WorkspaceSettings>('/api/workspaces/settings');
+}
+
+export function saveWorkspaceSettings(input: WorkspaceSettings) {
+  return request<WorkspaceSettings>('/api/workspaces/settings', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
 }
 
 // --------------------------------------------------------------------- stats
@@ -524,4 +996,28 @@ export interface Reports {
 
 export function fetchReports() {
   return request<Reports>('/api/reports');
+}
+
+// -------------------------------------------------------------------- audit
+
+export interface AuditEntry {
+  id: number;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'PLACE' | 'UNPLACE' | string;
+  entityType: string;
+  entityId: number;
+  actorUserId: number | null;
+  actorName: string | null;
+  details: string | null;
+  createdAt: string;
+}
+
+export interface AuditPage {
+  page: number;
+  size: number;
+  total: number;
+  items: AuditEntry[];
+}
+
+export function fetchAuditFeed(page = 0, size = 25) {
+  return request<AuditPage>(`/api/audit?page=${page}&size=${size}`);
 }

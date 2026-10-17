@@ -5,21 +5,27 @@ import {
   RepStatus,
   changePlan,
   createExperienceLevel,
+  createMetricType,
   createStatus,
   createVertical,
   deleteExperienceLevel,
+  deleteMetricType,
   deleteStatus,
   deleteVertical,
   fetchBranding,
   fetchDiscordSettings,
   fetchSubscription,
+  fetchWorkspaceSettings,
+  isProFeatureError,
   listExperienceLevels,
+  listMetricTypes,
   listPlans,
   listStatuses,
   listVerticals,
   listWorkspaces,
   saveBranding,
   saveDiscordSettings,
+  saveWorkspaceSettings,
   startCheckout,
   updateExperienceLevel,
   updateStatus,
@@ -38,7 +44,10 @@ export default function SettingsPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1>Settings</h1>
+        <div>
+          <h1>Settings</h1>
+          <p className="page-sub">Billing, branding, Discord and your workspace lookups.</p>
+        </div>
       </div>
       <p className="muted" style={{ marginTop: '-0.75rem', marginBottom: '1.5rem' }}>
         Customise the lookups your workspace uses. Editing requires an admin or
@@ -64,6 +73,8 @@ export default function SettingsPage() {
         remove={(id) => deleteExperienceLevel(id)}
         nameLabel="Experience level"
       />
+      <PerformanceSection />
+      <LeaderboardVisibilitySection />
     </div>
   );
 }
@@ -707,6 +718,208 @@ function StatusSection() {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+/**
+ * Performance metric types [PRO] — the per-workspace vocabulary activity is
+ * logged in (calls, meetings, revenue, custom). Counts and money (minor
+ * units); a metric that is still in use cannot be deleted. Writing requires
+ * admin/owner (API-enforced) and the Pro plan.
+ */
+function PerformanceSection() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['metric-types'],
+    queryFn: listMetricTypes,
+    retry: false,
+  });
+  const [name, setName] = useState('');
+  const [unit, setUnit] = useState<'count' | 'currency'>('count');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['metric-types'] });
+  }
+
+  function report(err: unknown) {
+    setNotice(null);
+    setErrMsg(err instanceof ApiError ? err.message : 'Operation failed');
+  }
+
+  const addMutation = useMutation({
+    mutationFn: () => createMetricType(name.trim(), unit),
+    onSuccess: () => {
+      setName('');
+      setErrMsg(null);
+      invalidate();
+    },
+    onError: report,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteMetricType(id),
+    onSuccess: () => {
+      setErrMsg(null);
+      setNotice('Metric removed.');
+      invalidate();
+    },
+    onError: report,
+  });
+
+  const proLocked = isError && isProFeatureError(error);
+
+  return (
+    <section className="settings-section card">
+      <h2>Performance metrics</h2>
+      <p className="muted">
+        The metric types activity is logged against — counts and money (stored
+        as minor units). Deleting a metric that entries use is blocked.
+        Writing requires admin or owner.
+      </p>
+      {proLocked && (
+        <p className="muted">
+          Performance metrics are available on the Pro plan.{' '}
+          <a href="/pricing">Upgrade your plan</a>.
+        </p>
+      )}
+      {isError && !proLocked && (
+        <p className="error-text">
+          {error instanceof ApiError ? error.message : 'Could not load metrics.'}
+        </p>
+      )}
+      {notice && <p className="muted">{notice}</p>}
+      {errMsg && <p className="error-text">{errMsg}</p>}
+      {!proLocked && (
+        <form
+          className="table-bar"
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            if (name.trim()) addMutation.mutate();
+          }}
+        >
+          <input
+            placeholder="e.g. Demos booked"
+            value={name}
+            aria-label="Metric name"
+            onChange={(e) => setName(e.target.value)}
+          />
+          <select
+            value={unit}
+            onChange={(e) => setUnit(e.target.value as 'count' | 'currency')}
+            style={{ width: 'auto' }}
+            aria-label="Metric unit"
+          >
+            <option value="count">Count</option>
+            <option value="currency">Money</option>
+          </select>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={addMutation.isPending || !name.trim()}
+          >
+            {addMutation.isPending ? 'Adding…' : 'Add metric'}
+          </button>
+        </form>
+      )}
+      {!proLocked && isLoading && <p className="muted">Loading…</p>}
+      {!proLocked &&
+        (data ?? []).map((metric) => (
+          <div className="lookup-row" key={metric.id}>
+            <span className="name">
+              {metric.name} <span className="pill">{metric.unit}</span>
+            </span>
+            <button
+              className="btn btn-sm btn-danger"
+              onClick={() => deleteMutation.mutate(metric.id)}
+              disabled={deleteMutation.isPending}
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+    </section>
+  );
+}
+
+/**
+ * Whether reps see other reps' names on the leaderboard (workspace setting,
+ * Phase 7). Off by default: reps then only see their own rank.
+ */
+function LeaderboardVisibilitySection() {
+  const queryClient = useQueryClient();
+  const { data, isError, error } = useQuery({
+    queryKey: ['workspace-settings'],
+    queryFn: fetchWorkspaceSettings,
+    retry: false,
+  });
+  const [showNames, setShowNames] = useState<boolean | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data) setShowNames(data.leaderboardShowNames);
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      saveWorkspaceSettings({ leaderboardShowNames: showNames ?? false }),
+    onSuccess: () => {
+      setErrMsg(null);
+      setNotice(
+        (showNames ?? false)
+          ? 'Saved — reps now see each other on the leaderboard.'
+          : 'Saved — reps only see their own rank.',
+      );
+      queryClient.invalidateQueries({ queryKey: ['workspace-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+    },
+    onError: (err) => {
+      setNotice(null);
+      setErrMsg(err instanceof ApiError ? err.message : 'Saving failed');
+    },
+  });
+
+  return (
+    <section className="settings-section card">
+      <h2>Leaderboard visibility</h2>
+      <p className="muted">
+        When off, reps only see their own rank; other names are masked by the
+        server. Owners and admins always see everyone.
+      </p>
+      {isError && (
+        <p className="error-text">
+          {error instanceof ApiError ? error.message : 'Could not load settings.'}
+        </p>
+      )}
+      {notice && <p className="muted">{notice}</p>}
+      {errMsg && <p className="error-text">{errMsg}</p>}
+      {showNames !== null && (
+        <form
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            saveMutation.mutate();
+          }}
+        >
+          <label className="lookup-row" style={{ cursor: 'pointer' }}>
+            <span className="name">Show rep names on the leaderboard</span>
+            <input
+              type="checkbox"
+              checked={showNames}
+              onChange={(e) => setShowNames(e.target.checked)}
+            />
+          </label>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={saveMutation.isPending}
+          >
+            {saveMutation.isPending ? 'Saving…' : 'Save setting'}
+          </button>
+        </form>
+      )}
     </section>
   );
 }

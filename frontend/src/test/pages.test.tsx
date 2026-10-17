@@ -80,7 +80,8 @@ describe('RosterPage', () => {
     expect(screen.getByText('Dana Scott')).toBeInTheDocument();
     expect(screen.getByText('Mid')).toBeInTheDocument();
     expect(screen.getByText('Bench', { selector: '.pill-bench' })).toBeInTheDocument();
-    expect(screen.getByText('Bench', { selector: '.pill-bench-now' })).toBeInTheDocument();
+    // the derived "Bench" pill is suppressed when a status pill already says Bench
+    expect(screen.queryByText('Bench', { selector: '.pill-bench-now' })).not.toBeInTheDocument();
     expect(screen.getByText('Great closer')).toBeInTheDocument();
 
     // unplaced rep offers the place action

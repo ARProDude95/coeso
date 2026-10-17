@@ -13,6 +13,7 @@ import OffersPage from './pages/OffersPage';
 import SettingsPage from './pages/SettingsPage';
 import PricingPage from './pages/PricingPage';
 import ReportsPage from './pages/ReportsPage';
+import PerformancePage from './pages/PerformancePage';
 
 /**
  * Route guards:
@@ -84,6 +85,7 @@ export default function App() {
         <Route path="/roster" element={<RosterPage />} />
         <Route path="/offers" element={<OffersPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/performance" element={<PerformancePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/pricing" element={<PricingPage />} />
       </Route>

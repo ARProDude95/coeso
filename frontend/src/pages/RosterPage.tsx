@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
@@ -6,7 +6,10 @@ import {
   RepFilters,
   createRep,
   deleteRep,
+  downloadCsv,
   endPlacement,
+  exportRepsCsv,
+  fetchRepPhoto,
   fetchStats,
   listOffers,
   listPlacements,
@@ -14,8 +17,11 @@ import {
   listStatuses,
   listVerticals,
   listExperienceLevels,
+  listLanguages,
+  listSkills,
   placeRep,
   updateRep,
+  uploadRepPhoto,
 } from '../api';
 import Modal from '../components/Modal';
 
@@ -29,6 +35,9 @@ export default function RosterPage() {
   const [statusId, setStatusId] = useState<number | null>(null);
   const [experienceId, setExperienceId] = useState<number | null>(null);
   const [placed, setPlaced] = useState<boolean | null>(null);
+  const [skillId, setSkillId] = useState<number | null>(null);
+  const [language, setLanguage] = useState<string | null>(null);
+  const [available, setAvailable] = useState<boolean | null>(null);
 
   const filters: RepFilters = useMemo(() => ({
     q: q || undefined,
@@ -36,15 +45,21 @@ export default function RosterPage() {
     statusId: statusId ?? undefined,
     experienceId: experienceId ?? undefined,
     placed: placed ?? undefined,
-  }), [q, verticalId, statusId, experienceId, placed]);
+    skillId: skillId ?? undefined,
+    language: language ?? undefined,
+    available: available ?? undefined,
+  }), [q, verticalId, statusId, experienceId, placed, skillId, language, available]);
 
   const hasFilters = q !== '' || verticalId != null || statusId != null
-    || experienceId != null || placed != null;
+    || experienceId != null || placed != null || skillId != null
+    || language != null || available != null;
 
   const { data: stats } = useQuery({ queryKey: ['stats'], queryFn: fetchStats });
   const { data: verticals } = useQuery({ queryKey: ['verticals'], queryFn: listVerticals });
   const { data: statuses } = useQuery({ queryKey: ['statuses'], queryFn: listStatuses });
   const { data: levels } = useQuery({ queryKey: ['levels'], queryFn: listExperienceLevels });
+  const { data: skills } = useQuery({ queryKey: ['skills'], queryFn: listSkills });
+  const { data: languages } = useQuery({ queryKey: ['languages'], queryFn: listLanguages });
   const { data: repsPage, isLoading } = useQuery({
     queryKey: ['reps', filters],
     queryFn: () => listReps(filters),
@@ -56,6 +71,9 @@ export default function RosterPage() {
     setStatusId(null);
     setExperienceId(null);
     setPlaced(null);
+    setSkillId(null);
+    setLanguage(null);
+    setAvailable(null);
   }
 
   function invalidateReps() {
@@ -67,8 +85,14 @@ export default function RosterPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1>Roster</h1>
-        <NewRepButton onCreated={invalidateReps} />
+        <div>
+          <h1>Roster</h1>
+          <p className="page-sub">Your reps, their status, and where they sit right now.</p>
+        </div>
+        <div className="header-actions">
+          <ExportCsvButton filters={filters} />
+          <NewRepButton onCreated={invalidateReps} />
+        </div>
       </div>
 
       {stats && (
@@ -193,6 +217,78 @@ export default function RosterPage() {
             </span>
           </div>
 
+          <div className="filter-group">
+            <h4>Skill</h4>
+            {skills?.map((t) => (
+              <span
+                key={t.id}
+                className={`chip${skillId === t.id ? ' selected' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSkillId(skillId === t.id ? null : t.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setSkillId(skillId === t.id ? null : t.id);
+                  }
+                }}
+              >
+                {t.name}
+              </span>
+            ))}
+            {!skills?.length && <span className="muted">No skills yet</span>}
+          </div>
+
+          <div className="filter-group">
+            <h4>Language</h4>
+            {languages?.map((l) => (
+              <span
+                key={l}
+                className={`chip${language === l ? ' selected' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => setLanguage(language === l ? null : l)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setLanguage(language === l ? null : l);
+                  }
+                }}
+              >
+                {l}
+              </span>
+            ))}
+            {!languages?.length && <span className="muted">No languages yet</span>}
+          </div>
+
+          <div className="filter-group">
+            <h4>Availability</h4>
+            <span
+              className={`chip${available === true ? ' selected' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => setAvailable(available === true ? null : true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setAvailable(available === true ? null : true);
+                }
+              }}
+            >
+              Available now
+            </span>
+            <span
+              className={`chip${available === false ? ' selected' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => setAvailable(available === false ? null : false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setAvailable(available === false ? null : false);
+                }
+              }}
+            >
+              Not yet
+            </span>
+          </div>
+
           {hasFilters && (
             <button className="btn btn-sm" onClick={clearFilters}>
               Clear filters
@@ -222,6 +318,49 @@ export default function RosterPage() {
 }
 
 // ------------------------------------------------------------------- rep card
+
+/**
+ * The rep's photo when one was uploaded (fetched with the session headers —
+ * an <img> tag cannot send a Bearer token), otherwise the initials tile.
+ */
+function RepAvatar({ rep }: { rep: Rep }) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!rep.hasPhoto) {
+      return;
+    }
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    fetchRepPhoto(rep.id)
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+        } else {
+          objectUrl = url;
+          setPhotoUrl(url);
+        }
+      })
+      .catch(() => {
+        // fall back to initials when the photo cannot load
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [rep.id, rep.hasPhoto]);
+
+  if (photoUrl) {
+    return <img className="avatar profile-photo" src={photoUrl} alt={rep.name} />;
+  }
+  return (
+    <div className="avatar" aria-hidden="true">
+      {initials(rep.name)}
+    </div>
+  );
+}
 
 function initials(name: string): string {
   return name
@@ -272,11 +411,9 @@ function RepCard({ rep, onChanged }: { rep: Rep; onChanged: () => void }) {
   });
 
   return (
-    <article className="card rep-card">
+    <article className="card card-hover rep-card">
       <div className="rep-head">
-        <div className="avatar" aria-hidden="true">
-          {initials(rep.name)}
-        </div>
+        <RepAvatar rep={rep} />
         <div style={{ minWidth: 0 }}>
           <h3 style={{ margin: 0 }}>{rep.name}</h3>
           <div className="muted" style={{ fontSize: '0.82rem' }}>{rep.email}</div>
@@ -291,8 +428,19 @@ function RepCard({ rep, onChanged }: { rep: Rep; onChanged: () => void }) {
         )}
         {rep.placed ? (
           <span className="pill pill-placed">Placed</span>
-        ) : (
+        ) : !rep.statusName && (
+          // Only show the derived placement pill when no status pill already
+          // says "Bench" — otherwise the card renders BENCH twice.
           <span className="pill pill-bench-now">Bench</span>
+        )}
+        {!rep.placed && rep.benchDays != null && (
+          // Bench aging: red once a rep has sat unplaced for 2+ weeks.
+          <span
+            className={`pill ${rep.benchDays >= 14 ? 'pill-danger' : 'pill-muted'}`}
+            title="Days since this rep's last placement ended"
+          >
+            {rep.benchDays}d bench
+          </span>
         )}
       </div>
 
@@ -301,6 +449,29 @@ function RepCard({ rep, onChanged }: { rep: Rep; onChanged: () => void }) {
           → {rep.offerTitle}{rep.clientName ? ` @ ${rep.clientName}` : ''}
         </div>
       )}
+
+      {(rep.skills?.length || rep.languages?.length || rep.timezone
+        || rep.availableFrom || rep.hoursPerWeek != null) && (
+        <div className="rep-tags">
+          {rep.skills?.map((skill) => (
+            <span className="pill pill-gold" key={skill}>{skill}</span>
+          ))}
+          {rep.languages?.map((lang) => (
+            <span className="pill" key={lang}>{lang}</span>
+          ))}
+          {rep.timezone && <span className="pill" title="Timezone">{rep.timezone}</span>}
+          {rep.hoursPerWeek != null && (
+            <span className="pill" title="Hours per week">{rep.hoursPerWeek}h/wk</span>
+          )}
+          {rep.availableFrom && (
+            <span className="pill pill-open" title="Available from">
+              Free {rep.availableFrom}
+            </span>
+          )}
+        </div>
+      )}
+
+      {rep.bio && <div className="rep-notes">{rep.bio}</div>}
 
       {rep.notes && <div className="rep-notes">{rep.notes}</div>}
 
@@ -376,6 +547,8 @@ function RepFormModal({
   const { data: verticals } = useQuery({ queryKey: ['verticals'], queryFn: listVerticals });
   const { data: statuses } = useQuery({ queryKey: ['statuses'], queryFn: listStatuses });
   const { data: levels } = useQuery({ queryKey: ['levels'], queryFn: listExperienceLevels });
+  const { data: skillTags } = useQuery({ queryKey: ['skills'], queryFn: listSkills });
+  const { data: languageOptions } = useQuery({ queryKey: ['languages'], queryFn: listLanguages });
 
   const [name, setName] = useState(rep?.name ?? '');
   const [email, setEmail] = useState(rep?.email ?? '');
@@ -383,10 +556,26 @@ function RepFormModal({
   const [status, setStatus] = useState<number | ''>(rep?.statusId ?? '');
   const [level, setLevel] = useState<number | ''>(rep?.experienceLevelId ?? '');
   const [notes, setNotes] = useState(rep?.notes ?? '');
+  // Phase 6 profile
+  const [bio, setBio] = useState(rep?.bio ?? '');
+  const [skills, setSkills] = useState((rep?.skills ?? []).join(', '));
+  const [languagesText, setLanguagesText] = useState((rep?.languages ?? []).join(', '));
+  const [preferred, setPreferred] = useState<number[]>(rep?.preferredVerticalIds ?? []);
+  const [timezone, setTimezone] = useState(rep?.timezone ?? '');
+  const [hours, setHours] = useState(rep?.hoursPerWeek != null ? String(rep.hoursPerWeek) : '');
+  const [availableFrom, setAvailableFrom] = useState(rep?.availableFrom ?? '');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  function splitList(value: string): string[] {
+    return value
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const input = {
         name: name.trim(),
         email: email.trim() || null,
@@ -394,8 +583,21 @@ function RepFormModal({
         statusId: status === '' ? null : status,
         experienceLevelId: level === '' ? null : level,
         notes: notes.trim() || null,
+        // Phase 6 profile
+        bio: bio.trim() || null,
+        skills: splitList(skills),
+        languages: splitList(languagesText),
+        preferredVerticalIds: preferred,
+        timezone: timezone.trim() || null,
+        hoursPerWeek: hours === '' ? null : Math.max(0, Math.min(168, Number(hours) || 0)),
+        availableFrom: availableFrom || null,
       };
-      return rep ? updateRep(rep.id, input) : createRep(input);
+      const saved = rep ? await updateRep(rep.id, input) : await createRep(input);
+      // The photo needs the id, so it uploads right after the row exists.
+      if (photoFile) {
+        await uploadRepPhoto(saved.id, photoFile);
+      }
+      return saved;
     },
     onSuccess: onSaved,
     onError: (err) =>
@@ -468,6 +670,122 @@ function RepFormModal({
             ))}
           </select>
         </div>
+
+        <div className="field">
+          <label htmlFor="rep-skills">Skills</label>
+          <input
+            id="rep-skills"
+            list="skill-tag-list"
+            placeholder="Comma-separated: Cold Calling, Outbound…"
+            value={skills}
+            onChange={(e) => setSkills(e.target.value)}
+          />
+          <datalist id="skill-tag-list">
+            {skillTags?.map((t) => (
+              <option key={t.id} value={t.name} />
+            ))}
+          </datalist>
+        </div>
+
+        <div className="field">
+          <label htmlFor="rep-languages">Languages</label>
+          <input
+            id="rep-languages"
+            list="language-list"
+            placeholder="Comma-separated: English, Spanish…"
+            value={languagesText}
+            onChange={(e) => setLanguagesText(e.target.value)}
+          />
+          <datalist id="language-list">
+            {languageOptions?.map((l) => (
+              <option key={l} value={l} />
+            ))}
+          </datalist>
+        </div>
+
+        <div className="field">
+          <label>Preferred verticals</label>
+          <div>
+            {verticals?.map((v) => (
+              <span
+                key={v.id}
+                className={`chip${preferred.includes(v.id) ? ' selected' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() =>
+                  setPreferred((current) =>
+                    current.includes(v.id)
+                      ? current.filter((id) => id !== v.id)
+                      : [...current, v.id])
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setPreferred((current) =>
+                      current.includes(v.id)
+                        ? current.filter((id) => id !== v.id)
+                        : [...current, v.id]);
+                  }
+                }}
+              >
+                {v.name}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="rep-timezone">Timezone</label>
+            <input
+              id="rep-timezone"
+              placeholder="e.g. Europe/Berlin"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="rep-hours">Hours / week</label>
+            <input
+              id="rep-hours"
+              type="number"
+              min={0}
+              max={168}
+              value={hours}
+              onChange={(e) => setHours(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="rep-available">Available from</label>
+            <input
+              id="rep-available"
+              type="date"
+              value={availableFrom}
+              onChange={(e) => setAvailableFrom(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="field">
+          <label htmlFor="rep-bio">Bio</label>
+          <textarea
+            id="rep-bio"
+            rows={2}
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="rep-photo">Profile photo {rep ? '' : '(save first)'}</label>
+          <input
+            id="rep-photo"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            disabled={!rep}
+            title={rep ? undefined : 'Save the rep before adding a photo'}
+            onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+          />
+        </div>
         <div className="field">
           <label htmlFor="rep-notes">Notes</label>
           <textarea
@@ -536,7 +854,7 @@ function PlaceOnOfferModal({
             }}
           >
             <div>
-              <div style={{ fontWeight: 600 }}>{offer.title}</div>
+              <div className="ws-name">{offer.title}</div>
               <div className="slug">
                 {offer.clientName} — {offer.filledSeats}/{offer.seats} seats filled
               </div>
@@ -551,6 +869,34 @@ function PlaceOnOfferModal({
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** Downloads the current (filtered) roster as CSV, same columns as import. */
+function ExportCsvButton({ filters }: { filters: RepFilters }) {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleExport() {
+    setExporting(true);
+    setError(null);
+    try {
+      const csv = await exportRepsCsv(filters);
+      downloadCsv('roster-export.csv', csv);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <>
+      <button className="btn" onClick={handleExport} disabled={exporting}>
+        {exporting ? 'Exporting…' : 'Export CSV'}
+      </button>
+      {error && <p className="error-text">{error}</p>}
+    </>
   );
 }
 
