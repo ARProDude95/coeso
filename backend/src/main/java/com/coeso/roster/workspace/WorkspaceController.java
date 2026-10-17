@@ -60,4 +60,17 @@ public class WorkspaceController {
             @RequestBody WorkspaceService.BrandingRequest request) {
         return workspaceService.updateBranding(request);
     }
+
+    // -------------------------------------------------- settings (Phase 7)
+
+    @GetMapping("/settings")
+    public WorkspaceService.SettingsResponse settings() {
+        return workspaceService.settings();
+    }
+
+    @PutMapping("/settings")
+    public WorkspaceService.SettingsResponse updateSettings(
+            @RequestBody WorkspaceService.SettingsRequest request) {
+        return workspaceService.updateSettings(request);
+    }
 }

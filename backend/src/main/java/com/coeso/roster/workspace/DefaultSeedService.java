@@ -1,10 +1,12 @@
 package com.coeso.roster.workspace;
 
 import com.coeso.roster.entity.ExperienceLevel;
+import com.coeso.roster.entity.MetricType;
 import com.coeso.roster.entity.RepStatus;
 import com.coeso.roster.entity.StatusKind;
 import com.coeso.roster.entity.Vertical;
 import com.coeso.roster.repo.Repositories.ExperienceLevelRepository;
+import com.coeso.roster.repo.Repositories.MetricTypeRepository;
 import com.coeso.roster.repo.Repositories.RepStatusRepository;
 import com.coeso.roster.repo.Repositories.VerticalRepository;
 import java.util.List;
@@ -32,15 +34,27 @@ public class DefaultSeedService {
     private static final List<String> DEFAULT_EXPERIENCE =
             List.of("Junior", "Mid", "Senior");
 
+    private record MetricSeed(String name, MetricType.Unit unit) {
+    }
+
+    private static final List<MetricSeed> DEFAULT_METRICS = List.of(
+            new MetricSeed("Calls", MetricType.Unit.COUNT),
+            new MetricSeed("Meetings", MetricType.Unit.COUNT),
+            new MetricSeed("Deals closed", MetricType.Unit.COUNT),
+            new MetricSeed("Revenue generated", MetricType.Unit.CURRENCY));
+
     private final VerticalRepository verticals;
     private final RepStatusRepository statuses;
     private final ExperienceLevelRepository experienceLevels;
+    private final MetricTypeRepository metricTypes;
 
     public DefaultSeedService(VerticalRepository verticals, RepStatusRepository statuses,
-                              ExperienceLevelRepository experienceLevels) {
+                              ExperienceLevelRepository experienceLevels,
+                              MetricTypeRepository metricTypes) {
         this.verticals = verticals;
         this.statuses = statuses;
         this.experienceLevels = experienceLevels;
+        this.metricTypes = metricTypes;
     }
 
     public void seed(Long workspaceId) {
@@ -62,6 +76,15 @@ public class DefaultSeedService {
             level.setWorkspaceId(workspaceId);
             level.setName(name);
             experienceLevels.save(level);
+        }
+        // Phase 7: default activity metrics (same set the migration gave
+        // workspaces that existed before this phase).
+        for (MetricSeed seed : DEFAULT_METRICS) {
+            MetricType metric = new MetricType();
+            metric.setWorkspaceId(workspaceId);
+            metric.setName(seed.name());
+            metric.setUnit(seed.unit());
+            metricTypes.save(metric);
         }
     }
 }

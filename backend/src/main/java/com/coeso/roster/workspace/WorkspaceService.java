@@ -46,6 +46,13 @@ public class WorkspaceService {
     public record BrandingResponse(String logoUrl, String accentColor, String customDomain) {
     }
 
+    /** Phase 7 workspace knobs (leaderboard privacy). */
+    public record SettingsRequest(Boolean leaderboardShowNames) {
+    }
+
+    public record SettingsResponse(boolean leaderboardShowNames) {
+    }
+
     private static final int TRIAL_DAYS = 14;
 
     private final WorkspaceRepository workspaces;
@@ -167,6 +174,27 @@ public class WorkspaceService {
 
     private static String blankToNull(String raw) {
         return raw == null || raw.isBlank() ? null : raw.trim();
+    }
+
+    // ------------------------------------------------------------- settings
+
+    /** Read is open to every member (the leaderboard renders for reps too). */
+    public SettingsResponse settings() {
+        Workspace workspace = workspaces.findById(TenantContext.requireWorkspaceId())
+                .orElseThrow(() -> new NotFoundException("Workspace not found"));
+        return new SettingsResponse(workspace.isLeaderboardShowNames());
+    }
+
+    @PreAuthorize("@roles.hasAtLeast('ADMIN')")
+    public SettingsResponse updateSettings(SettingsRequest request) {
+        Workspace workspace = workspaces.findById(TenantContext.requireWorkspaceId())
+                .orElseThrow(() -> new NotFoundException("Workspace not found"));
+        boolean showNames = Boolean.TRUE.equals(request.leaderboardShowNames());
+        workspace.setLeaderboardShowNames(showNames);
+        workspaces.save(workspace);
+        auditService.record(AuditLog.ACTION_UPDATE, "workspace", workspace.getId(),
+                Map.of("settings", "leaderboard", "leaderboardShowNames", showNames));
+        return new SettingsResponse(showNames);
     }
 
     @PreAuthorize("@roles.hasAtLeast('OWNER')")

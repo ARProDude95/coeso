@@ -34,6 +34,24 @@ public class PlanLimitService {
         assertCapacity(plan.getMaxMembers(), currentRows, "members", plan);
     }
 
+    /** Plan codes that unlock [PRO] features (Phase 7, 12). */
+    private static final java.util.Set<String> PRO_PLAN_CODES =
+            java.util.Set.of("pro", "unlimited");
+
+    /**
+     * [PRO] feature gate: raises a 402 PRO_FEATURE_REQUIRED envelope with an
+     * upgrade message when the workspace's plan is below Pro.
+     */
+    public void assertProFeature(Long workspaceId, String feature) {
+        Plan plan = planFor(workspaceId);
+        if (!PRO_PLAN_CODES.contains(plan.getCode())) {
+            throw new com.coeso.roster.common.ProFeatureRequiredException(feature,
+                    "Feature '" + feature + "' needs the Pro plan, but this workspace is on '"
+                            + plan.getName() + "'. Upgrade to unlock performance, "
+                            + "commissions and payouts.");
+        }
+    }
+
     private Plan planFor(Long workspaceId) {
         Workspace workspace = workspaces.findById(workspaceId)
                 .orElseThrow(() -> new IllegalStateException(

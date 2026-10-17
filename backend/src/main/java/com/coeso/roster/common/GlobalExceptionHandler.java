@@ -89,6 +89,15 @@ public class GlobalExceptionHandler {
                 .body(new ErrorBody(402, "PLAN_LIMIT_EXCEEDED", e.getMessage(), details));
     }
 
+    @ExceptionHandler(ProFeatureRequiredException.class)
+    public ResponseEntity<ErrorBody> proFeatureRequired(ProFeatureRequiredException e) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("feature", e.getFeature());
+        details.put("planRequired", "pro");
+        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                .body(new ErrorBody(402, "PRO_FEATURE_REQUIRED", e.getMessage(), details));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorBody> validation(MethodArgumentNotValidException e) {
         Map<String, Object> fields = new LinkedHashMap<>();

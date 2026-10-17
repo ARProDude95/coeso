@@ -50,6 +50,10 @@ public class Workspace {
     @Column(name = "custom_domain", length = 255)
     private String customDomain;
 
+    /** Phase 7: do reps see other reps' names on the leaderboard? */
+    @Column(name = "leaderboard_show_names", nullable = false)
+    private boolean leaderboardShowNames;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -130,6 +134,14 @@ public class Workspace {
 
     public void setCustomDomain(String customDomain) {
         this.customDomain = customDomain;
+    }
+
+    public boolean isLeaderboardShowNames() {
+        return leaderboardShowNames;
+    }
+
+    public void setLeaderboardShowNames(boolean leaderboardShowNames) {
+        this.leaderboardShowNames = leaderboardShowNames;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -1,9 +1,14 @@
 package com.coeso.roster.repo;
 
 import com.coeso.roster.entity.AuditLog;
+import com.coeso.roster.entity.ActivityEntry;
 import com.coeso.roster.entity.BillingEvent;
 import com.coeso.roster.entity.Client;
+import com.coeso.roster.entity.CommissionRule;
 import com.coeso.roster.entity.ExperienceLevel;
+import com.coeso.roster.entity.LedgerEntry;
+import com.coeso.roster.entity.MetricType;
+import com.coeso.roster.entity.Payout;
 import com.coeso.roster.entity.Invite;
 import com.coeso.roster.entity.Membership;
 import com.coeso.roster.entity.Offer;
@@ -122,5 +127,22 @@ public final class Repositories {
     }
 
     public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
+    }
+
+    // --------------------------------------------------- Phase 7 repositories
+
+    public interface MetricTypeRepository extends JpaRepository<MetricType, Long> {
+    }
+
+    public interface ActivityEntryRepository extends JpaRepository<ActivityEntry, Long> {
+    }
+
+    public interface CommissionRuleRepository extends JpaRepository<CommissionRule, Long> {
+    }
+
+    public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> {
+    }
+
+    public interface PayoutRepository extends JpaRepository<Payout, Long> {
     }
 }
