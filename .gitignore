@@ -15,6 +15,12 @@ frontend/.vite/
 *.log
 *.tsbuildinfo
 
+# start-dev.sh output
+logs/
+
+# CSV downloaded from the roster export button
+roster-export.csv
+
 # IDE / OS
 .idea/
 *.iml
