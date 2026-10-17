@@ -7,9 +7,11 @@ import com.coeso.roster.common.TenantContext;
 import com.coeso.roster.entity.AuditLog;
 import com.coeso.roster.entity.Client;
 import com.coeso.roster.entity.Offer;
+import com.coeso.roster.entity.OfferRequiredSkill;
 import com.coeso.roster.entity.OfferStatus;
 import com.coeso.roster.entity.PlacementStatus;
 import com.coeso.roster.entity.Vertical;
+import com.coeso.roster.lookup.SkillTagService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import com.coeso.roster.discord.DiscordNotifier;
@@ -41,7 +43,16 @@ public class OfferService {
             @Min(1) Integer seats,
             String notes,
             LocalDate opensAt,
-            LocalDate closesAt) {
+            LocalDate closesAt,
+            // ------------------------------------------------ Phase 6 requirements
+            Long requiredLevelId,
+            String requiredLanguage,
+            /** Minutes from UTC, 0–1439; both or neither, may wrap midnight. */
+            Integer tzWindowStart,
+            Integer tzWindowEnd,
+            LocalDate startDate,
+            /** Required skill tag names — reused/created case-insensitively. */
+            List<String> requiredSkills) {
     }
 
     public record RepChip(Long repId, String repName) {
@@ -61,7 +72,15 @@ public class OfferService {
             LocalDate closesAt,
             String status,
             String effectiveStatus,
-            List<RepChip> reps) {
+            List<RepChip> reps,
+            // ------------------------------------------------ Phase 6 requirements
+            Long requiredLevelId,
+            String requiredLevelName,
+            String requiredLanguage,
+            Integer tzWindowStart,
+            Integer tzWindowEnd,
+            LocalDate startDate,
+            List<String> requiredSkills) {
     }
 
     private static final Logger log = LoggerFactory.getLogger(OfferService.class);
@@ -69,15 +88,17 @@ public class OfferService {
     private final ScopedQueries scoped;
     private final AuditService auditService;
     private final DiscordNotifier discordNotifier;
+    private final SkillTagService skillTags;
 
     @PersistenceContext
     private EntityManager entityManager;
 
     public OfferService(ScopedQueries scoped, AuditService auditService,
-                        DiscordNotifier discordNotifier) {
+                        DiscordNotifier discordNotifier, SkillTagService skillTags) {
         this.scoped = scoped;
         this.auditService = auditService;
         this.discordNotifier = discordNotifier;
+        this.skillTags = skillTags;
     }
 
     @PreAuthorize("@roles.hasAtLeast('MANAGER')")
@@ -141,6 +162,8 @@ public class OfferService {
         apply(offer, request);
         entityManager.persist(offer);
         entityManager.flush();
+        // Required-skill rows need the generated offer id.
+        applyRequiredSkills(offer, request);
         auditService.record(AuditLog.ACTION_CREATE, "offer", offer.getId(),
                 Map.of("title", offer.getTitle(), "seats", offer.getSeats()));
 
@@ -159,6 +182,7 @@ public class OfferService {
         TenantContext.requireWorkspaceId();
         Offer offer = scoped.require(Offer.class, id, "Offer");
         apply(offer, request);
+        applyRequiredSkills(offer, request);
         entityManager.flush();
         auditService.record(AuditLog.ACTION_UPDATE, "offer", offer.getId(),
                 Map.of("title", offer.getTitle(), "seats", offer.getSeats()));
@@ -202,11 +226,80 @@ public class OfferService {
         offer.setNotes(request.notes());
         offer.setOpensAt(request.opensAt());
         offer.setClosesAt(request.closesAt());
+
+        // ---- Phase 6 requirements (null anywhere = no requirement) ---------
+        boolean startSet = request.tzWindowStart() != null;
+        boolean endSet = request.tzWindowEnd() != null;
+        if (startSet != endSet) {
+            throw new BadRequestException(
+                    "Timezone window needs both tzWindowStart and tzWindowEnd");
+        }
+        if (startSet && (!inMinuteRange(request.tzWindowStart())
+                || !inMinuteRange(request.tzWindowEnd()))) {
+            throw new BadRequestException(
+                    "Timezone window values must be minutes from UTC (0-1439)");
+        }
+        offer.setTzWindowStart(request.tzWindowStart());
+        offer.setTzWindowEnd(request.tzWindowEnd());
+        offer.setRequiredLanguage(request.requiredLanguage() == null
+                || request.requiredLanguage().isBlank()
+                ? null : request.requiredLanguage().trim());
+        offer.setStartDate(request.startDate());
+        if (request.requiredLevelId() != null) {
+            var level = scoped.require(
+                    com.coeso.roster.entity.ExperienceLevel.class,
+                    request.requiredLevelId(), "Experience level");
+            offer.setRequiredLevel(level);
+        } else {
+            offer.setRequiredLevel(null);
+        }
+    }
+
+    private static boolean inMinuteRange(int minutes) {
+        return minutes >= 0 && minutes < 1440;
+    }
+
+    /** Replaces the offer's required-skill rows (tags reused case-insensitively). */
+    private void applyRequiredSkills(Offer offer, OfferRequest request) {
+        Long workspaceId = TenantContext.requireWorkspaceId();
+        for (OfferRequiredSkill row : entityManager
+                .createQuery("select s from OfferRequiredSkill s"
+                        + " where s.offerId = :offerId", OfferRequiredSkill.class)
+                .setParameter("offerId", offer.getId())
+                .getResultList()) {
+            entityManager.remove(row);
+        }
+        // Executes deletes now — inserts would otherwise run first and trip
+        // the (workspace, offer, tag) unique key on a repeated save.
+        entityManager.flush();
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        List<String> requested = request.requiredSkills() == null
+                ? List.of() : request.requiredSkills();
+        for (String raw : requested) {
+            if (raw == null) {
+                continue;
+            }
+            String key = raw.trim().toLowerCase(java.util.Locale.ROOT);
+            if (key.isEmpty() || !seen.add(key)) {
+                continue;
+            }
+            var tag = skillTags.findOrCreate(raw);
+            if (tag == null) {
+                continue;
+            }
+            OfferRequiredSkill row = new OfferRequiredSkill();
+            row.setWorkspaceId(workspaceId);
+            row.setOfferId(offer.getId());
+            row.setTag(tag);
+            entityManager.persist(row);
+        }
     }
 
     /** Builds responses including seat fill and assigned-rep chips. */
     private List<OfferResponse> assemble(List<Offer> offers) {
         Map<Long, List<RepChip>> chips = loadChips(offers.stream().map(Offer::getId).toList());
+        Map<Long, List<String>> requiredSkills =
+                requiredSkillNamesById(offers.stream().map(Offer::getId).toList());
         List<OfferResponse> responses = new ArrayList<>(offers.size());
         for (Offer offer : offers) {
             List<RepChip> assigned = chips.getOrDefault(offer.getId(), List.of());
@@ -228,9 +321,42 @@ public class OfferService {
                     offer.getClosesAt(),
                     offer.getStatus().name(),
                     effective,
-                    assigned));
+                    assigned,
+                    offer.getRequiredLevelId(),
+                    offer.getRequiredLevel() == null ? null : offer.getRequiredLevel().getName(),
+                    offer.getRequiredLanguage(),
+                    offer.getTzWindowStart(),
+                    offer.getTzWindowEnd(),
+                    offer.getStartDate(),
+                    requiredSkills.getOrDefault(offer.getId(), List.of())));
         }
         return responses;
+    }
+
+    /** Required skill names per offer (N+1-safe: one query for the batch). */
+    private Map<Long, List<String>> requiredSkillNamesById(List<Long> offerIds) {
+        Map<Long, List<String>> result = new HashMap<>();
+        if (offerIds.isEmpty()) {
+            return result;
+        }
+        for (OfferRequiredSkill row : entityManager
+                .createQuery("select s from OfferRequiredSkill s"
+                        + " where s.offerId in :offerIds order by s.id asc",
+                        OfferRequiredSkill.class)
+                .setParameter("offerIds", offerIds)
+                .getResultList()) {
+            if (row.getTag() != null) {
+                result.computeIfAbsent(row.getOfferId(), k -> new ArrayList<>())
+                        .add(row.getTag().getName());
+            }
+        }
+        return result;
+    }
+
+    /** Single-offer variant for responses built one at a time. */
+    private List<String> requiredSkillNames(Long offerId) {
+        return requiredSkillNamesById(List.of(offerId))
+                .getOrDefault(offerId, List.of());
     }
 
     private Map<Long, List<RepChip>> loadChips(List<Long> offerIds) {

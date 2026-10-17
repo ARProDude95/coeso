@@ -1,5 +1,6 @@
 package com.coeso.roster.offer;
 
+import com.coeso.roster.match.SuggestionService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -18,9 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class OfferController {
 
     private final OfferService offerService;
+    private final SuggestionService suggestionService;
 
-    public OfferController(OfferService offerService) {
+    public OfferController(OfferService offerService, SuggestionService suggestionService) {
         this.offerService = offerService;
+        this.suggestionService = suggestionService;
     }
 
     @GetMapping
@@ -46,5 +49,17 @@ public class OfferController {
     @PostMapping("/{id}/close")
     public OfferService.OfferResponse close(@PathVariable Long id) {
         return offerService.close(id);
+    }
+
+    /**
+     * "Suggested reps": available reps ranked 0–100 against this offer's
+     * requirements with the per-factor breakdown. Manager+ (service-guarded);
+     * placing still goes through POST /api/placements and its rules.
+     */
+    @GetMapping("/{id}/suggested")
+    public List<SuggestionService.Suggestion> suggested(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer limit) {
+        return suggestionService.suggest(id, limit);
     }
 }

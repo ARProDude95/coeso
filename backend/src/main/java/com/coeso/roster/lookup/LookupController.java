@@ -102,4 +102,18 @@ public class LookupController {
         lookupService.deleteExperienceLevel(id);
         return ResponseEntity.noContent().build();
     }
+
+    // ------------------------------------------------- skills & languages (P6)
+
+    /** Workspace skill tags — read open to every member, like all lookups. */
+    @GetMapping("/skills")
+    public List<LookupService.SkillResponse> listSkills() {
+        return lookupService.listSkills();
+    }
+
+    /** Distinct languages in use — the roster language filter. */
+    @GetMapping("/languages")
+    public List<String> listLanguages() {
+        return lookupService.listLanguages();
+    }
 }

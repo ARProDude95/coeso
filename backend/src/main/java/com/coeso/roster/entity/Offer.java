@@ -72,6 +72,34 @@ public class Offer extends TimestampedTenantEntity {
     @Column(nullable = false, length = 16)
     private OfferStatus status = OfferStatus.OPEN;
 
+    // --------------------------------------------- Phase 6 offer requirements
+    // Offer needs for match scoring; null anywhere means "no requirement".
+
+    @Column(name = "required_level_id")
+    private Long requiredLevelId;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumns({
+            @JoinColumn(name = "workspace_id", referencedColumnName = "workspace_id",
+                    insertable = false, updatable = false),
+            @JoinColumn(name = "required_level_id", referencedColumnName = "id",
+                    insertable = false, updatable = false)
+    })
+    private ExperienceLevel requiredLevel;
+
+    @Column(name = "required_language", length = 60)
+    private String requiredLanguage;
+
+    /** Required working-hours window in minutes from UTC (0–1439, inclusive). */
+    @Column(name = "tz_window_start")
+    private Integer tzWindowStart;
+
+    @Column(name = "tz_window_end")
+    private Integer tzWindowEnd;
+
+    @Column(name = "start_date")
+    private LocalDate startDate;
+
     public Long getId() {
         return id;
     }
@@ -154,5 +182,54 @@ public class Offer extends TimestampedTenantEntity {
 
     public void setStatus(OfferStatus status) {
         this.status = status;
+    }
+
+    public Long getRequiredLevelId() {
+        return requiredLevelId;
+    }
+
+    public void setRequiredLevelId(Long requiredLevelId) {
+        this.requiredLevelId = requiredLevelId;
+    }
+
+    public ExperienceLevel getRequiredLevel() {
+        return requiredLevel;
+    }
+
+    public void setRequiredLevel(ExperienceLevel requiredLevel) {
+        this.requiredLevel = requiredLevel;
+        this.requiredLevelId = requiredLevel == null ? null : requiredLevel.getId();
+    }
+
+    public String getRequiredLanguage() {
+        return requiredLanguage;
+    }
+
+    public void setRequiredLanguage(String requiredLanguage) {
+        this.requiredLanguage = requiredLanguage;
+    }
+
+    public Integer getTzWindowStart() {
+        return tzWindowStart;
+    }
+
+    public void setTzWindowStart(Integer tzWindowStart) {
+        this.tzWindowStart = tzWindowStart;
+    }
+
+    public Integer getTzWindowEnd() {
+        return tzWindowEnd;
+    }
+
+    public void setTzWindowEnd(Integer tzWindowEnd) {
+        this.tzWindowEnd = tzWindowEnd;
+    }
+
+    public LocalDate getStartDate() {
+        return startDate;
+    }
+
+    public void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
     }
 }

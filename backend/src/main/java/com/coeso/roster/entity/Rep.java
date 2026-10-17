@@ -75,6 +75,25 @@ public class Rep extends TimestampedTenantEntity {
     @Column(name = "joined_date")
     private LocalDate joinedDate;
 
+    // ------------------------------------------------ Phase 6 profile fields
+    // (skills / languages / preferred verticals / photo live in their own
+    // tenant tables; these are the flat profile columns.)
+
+    @Column
+    private String bio;
+
+    /** IANA zone id, e.g. {@code Europe/Berlin}. */
+    @Column(length = 64)
+    private String timezone;
+
+    /** Weekly availability in hours (0–168). */
+    @Column(name = "hours_per_week")
+    private Integer hoursPerWeek;
+
+    /** First date the rep can start. */
+    @Column(name = "available_from")
+    private LocalDate availableFrom;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
@@ -176,5 +195,37 @@ public class Rep extends TimestampedTenantEntity {
 
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    public String getBio() {
+        return bio;
+    }
+
+    public void setBio(String bio) {
+        this.bio = bio;
+    }
+
+    public String getTimezone() {
+        return timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+    }
+
+    public Integer getHoursPerWeek() {
+        return hoursPerWeek;
+    }
+
+    public void setHoursPerWeek(Integer hoursPerWeek) {
+        this.hoursPerWeek = hoursPerWeek;
+    }
+
+    public LocalDate getAvailableFrom() {
+        return availableFrom;
+    }
+
+    public void setAvailableFrom(LocalDate availableFrom) {
+        this.availableFrom = availableFrom;
     }
 }

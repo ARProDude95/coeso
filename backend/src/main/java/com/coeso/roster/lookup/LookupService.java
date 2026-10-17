@@ -43,15 +43,21 @@ public class LookupService {
     public record ExperienceResponse(Long id, String name) {
     }
 
+    public record SkillResponse(Long id, String name) {
+    }
+
     private final ScopedQueries scoped;
     private final AuditService auditService;
+    private final SkillTagService skillTags;
 
     @PersistenceContext
     private EntityManager entityManager;
 
-    public LookupService(ScopedQueries scoped, AuditService auditService) {
+    public LookupService(ScopedQueries scoped, AuditService auditService,
+                         SkillTagService skillTags) {
         this.scoped = scoped;
         this.auditService = auditService;
+        this.skillTags = skillTags;
     }
 
     // ---------------------------------------------------------------- verticals
@@ -204,6 +210,22 @@ public class LookupService {
     }
 
     // ------------------------------------------------------------------- helpers
+
+    /** The workspace's skill-tag list (grows from rep/offer usage). */
+    public List<SkillResponse> listSkills() {
+        return skillTags.listAll().stream()
+                .map(t -> new SkillResponse(t.getId(), t.getName()))
+                .toList();
+    }
+
+    /** Distinct languages across the roster — the roster language filter. */
+    public List<String> listLanguages() {
+        TenantContext.requireWorkspaceId();
+        return entityManager
+                .createQuery("select distinct l.language from RepLanguage l"
+                        + " order by l.language asc", String.class)
+                .getResultList();
+    }
 
     private void requireWorkspace() {
         TenantContext.requireWorkspaceId();

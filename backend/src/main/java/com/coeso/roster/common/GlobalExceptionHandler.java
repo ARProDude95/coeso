@@ -34,6 +34,13 @@ public class GlobalExceptionHandler {
         return body(HttpStatus.NOT_FOUND, "NOT_FOUND", e.getMessage());
     }
 
+    /** Unmatched URL/path (e.g. probing a route that does not exist). */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ErrorBody> noResource(
+            org.springframework.web.servlet.resource.NoResourceFoundException e) {
+        return body(HttpStatus.NOT_FOUND, "NOT_FOUND", "No such endpoint");
+    }
+
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorBody> badRequest(BadRequestException e) {
         return body(HttpStatus.BAD_REQUEST, "BAD_REQUEST", e.getMessage());
@@ -114,12 +121,28 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorBody> dataIntegrity(DataIntegrityViolationException e) {
+        return conflictFromCause(String.valueOf(e.getMostSpecificCause().getMessage()));
+    }
+
+    /**
+     * Raw Hibernate constraint failures surface un-translated when they happen
+     * inside the tenant transaction template (no @Repository proxy in between),
+     * so map them to the same 409 envelope instead of falling through to 500.
+     */
+    @ExceptionHandler(org.hibernate.exception.ConstraintViolationException.class)
+    public ResponseEntity<ErrorBody> hibernateConstraint(
+            org.hibernate.exception.ConstraintViolationException e) {
+        return conflictFromCause(String.valueOf(e.getMessage()));
+    }
+
+    private ResponseEntity<ErrorBody> conflictFromCause(String cause) {
         String message = "Data integrity violation";
-        String cause = String.valueOf(e.getMostSpecificCause().getMessage());
         if (cause.contains("uq_placements_ws_active_rep")) {
             message = "Rep already has an active placement";
         } else if (cause.contains("uq_workspaces_slug")) {
             message = "Workspace slug is already taken";
+        } else if (cause.contains("_ws_name")) {
+            message = "That name is already used in this workspace";
         } else if (cause.toLowerCase().contains("duplicate")) {
             message = "Duplicate value violates a uniqueness constraint";
         } else if (cause.toLowerCase().contains("foreign key")) {

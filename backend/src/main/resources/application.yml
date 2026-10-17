@@ -17,6 +17,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  servlet:
+    multipart:
+      # Profile photos: accept the parse, then validate 2 MB in the service,
+      # which gives a clean 400 instead of a container-level abort.
+      max-file-size: 3MB
+      max-request-size: 4MB
 
 server:
   port: ${SERVER_PORT:8080}
