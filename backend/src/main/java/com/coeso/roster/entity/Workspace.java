@@ -54,6 +54,10 @@ public class Workspace {
     @Column(name = "leaderboard_show_names", nullable = false)
     private boolean leaderboardShowNames;
 
+    /** Office hours: platform commission on bookings, basis points (cap 5000). */
+    @Column(name = "office_hours_commission_bp", nullable = false)
+    private Integer officeHoursCommissionBp = 1000;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -142,6 +146,19 @@ public class Workspace {
 
     public void setLeaderboardShowNames(boolean leaderboardShowNames) {
         this.leaderboardShowNames = leaderboardShowNames;
+    }
+
+    public Integer getOfficeHoursCommissionBp() {
+        return officeHoursCommissionBp == null ? 1000 : officeHoursCommissionBp;
+    }
+
+    public void setOfficeHoursCommissionBp(Integer officeHoursCommissionBp) {
+        if (officeHoursCommissionBp != null
+                && (officeHoursCommissionBp < 0 || officeHoursCommissionBp > 5000)) {
+            throw new IllegalArgumentException(
+                    "office_hours_commission_bp must be between 0 and 5000 basis points");
+        }
+        this.officeHoursCommissionBp = officeHoursCommissionBp;
     }
 
     public LocalDateTime getCreatedAt() {

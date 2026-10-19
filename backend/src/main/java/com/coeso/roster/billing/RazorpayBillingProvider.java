@@ -103,30 +103,70 @@ public class RazorpayBillingProvider implements BillingProvider {
             notes.put("workspace_id", String.valueOf(command.workspaceId()));
             notes.put("plan_code", command.planCode());
             fields.put("notes", notes);
-            String body = objectMapper.writeValueAsString(fields);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(apiBase + "/v1/orders"))
-                    .header("Authorization", basic(keyId, keySecret))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request,
-                    HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 300) {
-                throw new IllegalStateException("Razorpay order failed: HTTP "
-                        + response.statusCode());
-            }
-            JsonNode json = objectMapper.readTree(response.body());
-            // Deliberately no hosted URL: Razorpay Checkout is opened by the
-            // frontend with this order id. subscription logs it as the
-            // provider reference so the webhook can be reconciled.
-            return new CheckoutSession(null, null, json.path("id").asText(null));
+            return createOrder(fields, "ws-" + command.workspaceId() + "-" + command.planCode(), notes);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
             throw new IllegalStateException("Razorpay order request failed", e);
         }
+    }
+
+    /**
+     * Creates one-off Razorpay order for a non-subscription charge (paid
+     * office hours). The notes ride onto the payment events, so the booking
+     * webhook can resolve the booking from the verified payload.
+     *
+     * @return the Razorpay order id (the frontend opens Razorpay Checkout.js
+     *         with it; there is no hosted redirect URL to open)
+     */
+    public String createPaymentOrderForBooking(long amountMinor, String currency,
+                                               Map<String, String> notes, String receipt) {
+        if (!configured()) {
+            throw new IllegalStateException(
+                    "Razorpay is not configured; set app.billing.razorpay.key-id "
+                            + "and app.billing.razorpay.key-secret");
+        }
+        try {
+            Map<String, Object> fields = new LinkedHashMap<>();
+            fields.put("amount", amountMinor);
+            fields.put("currency", currency);
+            fields.put("notes", notes);
+            JsonNode created = objectMapper.readTree(postOrder(
+                    objectMapper.writeValueAsString(fields)));
+            return created.path("id").asText(null);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("Razorpay order request failed", e);
+        }
+    }
+
+    /** POSTs {@code body} to /v1/orders; returns the raw response JSON. */
+    private String postOrder(String body) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(apiBase + "/v1/orders"))
+                .header("Authorization", basic(keyId, keySecret))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        HttpResponse<String> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() >= 300) {
+            throw new IllegalStateException("Razorpay order failed: HTTP "
+                    + response.statusCode());
+        }
+        return response.body();
+    }
+
+    /** Shared order-creation path used by both checkout and office hours. */
+    private CheckoutSession createOrder(Map<String, Object> fields, String receipt,
+                                        Map<String, String> notes) throws Exception {
+        String body = postOrder(objectMapper.writeValueAsString(fields));
+        JsonNode json = objectMapper.readTree(body);
+        // Deliberately no hosted URL: Razorpay Checkout is opened by the
+        // frontend with this order id. subscription logs it as the
+        // provider reference so the webhook can be reconciled.
+        return new CheckoutSession(null, null, json.path("id").asText(null));
     }
 
     @Override

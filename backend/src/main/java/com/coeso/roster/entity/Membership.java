@@ -21,6 +21,7 @@ import org.hibernate.annotations.Filter;
 @Filter(name = TenantContextFilter.NAME, condition = "workspace_id = :workspaceId")
 public class Membership extends TimestampedTenantEntity {
 
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -40,6 +41,10 @@ public class Membership extends TimestampedTenantEntity {
     /** Optional link between the login account and a rep profile in this workspace. */
     @Column(name = "rep_id")
     private Long repId;
+
+    /** Expert: may publish paid office-hour slots in this workspace. */
+    @Column(nullable = false)
+    private boolean expert = false;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumns({
@@ -92,5 +97,13 @@ public class Membership extends TimestampedTenantEntity {
 
     public void setRep(Rep rep) {
         this.rep = rep;
+    }
+
+    public boolean isExpert() {
+        return expert;
+    }
+
+    public void setExpert(boolean expert) {
+        this.expert = expert;
     }
 }

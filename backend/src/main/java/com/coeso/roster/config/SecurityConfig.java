@@ -57,9 +57,11 @@ public class SecurityConfig {
                         // code exchange authenticates against Discord itself.
                         .requestMatchers(HttpMethod.GET, "/api/auth/discord/url").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/discord").permitAll()
-                        // Provider webhook: authenticated by its own signature over
-                        // the raw body, not by JWT (see BillingController).
+                        // Provider webhooks: authenticated by their own signature over
+                        // the raw body, not by JWT (see BillingController and
+                        // PaymentsWebhookController).
                         .requestMatchers(HttpMethod.POST, "/api/billing/webhooks/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/webhooks/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling.authenticationEntryPoint(this::writeUnauthorized))
