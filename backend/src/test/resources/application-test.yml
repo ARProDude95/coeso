@@ -26,6 +26,12 @@ app:
       # No secret-key: checkout answers 503 in tests (asserted explicitly).
       secret-key: ""
       webhook-secret: whsec_test_secret_for_signature_checks
+    razorpay:
+      # No key-id / key-secret: razorpay checkout answers 503 in tests
+      # (asserted explicitly), mirroring the stripe case.
+      key-id: ""
+      key-secret: ""
+      webhook-secret: whsec_test_razorpay_secret_for_signature_checks
 
 logging:
   level:

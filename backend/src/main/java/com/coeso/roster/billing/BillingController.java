@@ -67,13 +67,33 @@ public class BillingController {
     public ResponseEntity<Map<String, String>> stripeWebhook(
             @RequestBody String payload,
             @RequestHeader(value = "Stripe-Signature", required = false) String signature) {
-        if (!"stripe".equals(providers.active().name())) {
+        return webhook("stripe", payload, signature);
+    }
+
+    /**
+     * Razorpay webhook: same guarantees as Stripe's, with the provider's own
+     * header ({@code X-Razorpay-Signature}, hex HMAC over the raw body with no
+     * timestamp) and its event shape. Route is live only when Razorpay is the
+     * configured provider, mirroring the Stripe route.
+     */
+    @PostMapping("/webhooks/razorpay")
+    public ResponseEntity<Map<String, String>> razorpayWebhook(
+            @RequestBody String payload,
+            @RequestHeader(value = "X-Razorpay-Signature", required = false) String signature) {
+        return webhook("razorpay", payload, signature);
+    }
+
+    /** Shared webhook path: wrong-provider -> 404, verify -> apply, ledger. */
+    private ResponseEntity<Map<String, String>> webhook(String providerName,
+                                                        String payload, String signature) {
+        if (!providerName.equals(providers.active().name())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("outcome", "wrong-provider"));
         }
+        BillingProvider provider = providers.active();
         // Signature check throws BillingSignatureException -> 401 in the
         // exception handler. Nothing is parsed or persisted before this passes.
-        BillingProvider.VerifiedEvent event = providers.stripe().verifyAndDecode(payload, signature);
+        BillingProvider.VerifiedEvent event = provider.verifyAndDecode(payload, signature);
         BillingService.WebhookResult result = billingService.processVerifiedEvent(event, payload);
         return ResponseEntity.ok(Map.of("outcome", result.outcome(), "eventId", result.eventId()));
     }
