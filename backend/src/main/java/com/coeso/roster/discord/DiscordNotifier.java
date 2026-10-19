@@ -16,4 +16,10 @@ public interface DiscordNotifier {
 
     /** A rep asked to join an offer. */
     void placementRequest(Long workspaceId, String repName, String offerTitle);
+
+    /** Someone asked a member for an intro (smart intros, phase 9). */
+    void introRequested(Long workspaceId, String fromName, String toName);
+
+    /** A member accepted an intro request. */
+    void introAccepted(Long workspaceId, String fromName, String toName);
 }

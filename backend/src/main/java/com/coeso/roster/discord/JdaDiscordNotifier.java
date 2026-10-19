@@ -50,6 +50,18 @@ public class JdaDiscordNotifier implements DiscordNotifier {
         send(workspaceId, "📨 **" + repName + "** asked to join *" + offerTitle + "*");
     }
 
+    @Override
+    public void introRequested(Long workspaceId, String fromName, String toName) {
+        send(workspaceId, "🤝 **" + fromName + "** asked **" + toName
+                + "** for an intro — respond on the intros page");
+    }
+
+    @Override
+    public void introAccepted(Long workspaceId, String fromName, String toName) {
+        send(workspaceId, "👋 **" + toName + "** accepted an intro with **"
+                + fromName + "*");
+    }
+
     private void send(Long workspaceId, String message) {
         try {
             JDA instance = jda();

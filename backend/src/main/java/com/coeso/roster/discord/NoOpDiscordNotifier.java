@@ -26,4 +26,14 @@ public class NoOpDiscordNotifier implements DiscordNotifier {
     public void placementRequest(Long workspaceId, String repName, String offerTitle) {
         // no bot configured: nothing to do
     }
+
+    @Override
+    public void introRequested(Long workspaceId, String fromName, String toName) {
+        // no bot configured: nothing to do
+    }
+
+    @Override
+    public void introAccepted(Long workspaceId, String fromName, String toName) {
+        // no bot configured: nothing to do
+    }
 }
