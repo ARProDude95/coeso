@@ -61,6 +61,38 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    to: '/office-hours',
+    label: 'Office hours',
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
+  },
+  {
+    to: '/intros',
+    label: 'Intros',
+    icon: (
+      <>
+        <path d="M8 12h8" />
+        <path d="M12 8v8" />
+        <circle cx="12" cy="12" r="9" />
+      </>
+    ),
+  },
+  {
+    to: '/pods',
+    label: 'Pods',
+    icon: (
+      <>
+        <circle cx="7" cy="8" r="3" />
+        <circle cx="17" cy="8" r="3" />
+        <circle cx="12" cy="17" r="3" />
+      </>
+    ),
+  },
+  {
     to: '/pricing',
     label: 'Pricing',
     icon: (

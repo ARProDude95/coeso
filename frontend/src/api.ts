@@ -1021,3 +1021,298 @@ export interface AuditPage {
 export function fetchAuditFeed(page = 0, size = 25) {
   return request<AuditPage>(`/api/audit?page=${page}&size=${size}`);
 }
+
+// ------------------------------------------- office hours (paid sessions)
+
+export interface OfficeHourSlot {
+  id: number;
+  expertUserId: number;
+  expertName: string | null;
+  startsAt: string;
+  durationMinutes: number;
+  priceMinor: number;
+  currency: string;
+  status: 'OPEN' | 'BOOKED' | 'CANCELLED';
+}
+
+export interface OfficeHourBooking {
+  id: number;
+  slotId: number;
+  expertUserId: number;
+  memberUserId: number;
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
+  priceMinor: number;
+  expertAmountMinor: number;
+  platformAmountMinor: number;
+  currency: string;
+  meetingLink: string | null;
+  providerOrderId: string | null;
+  confirmedAt: string | null;
+  cancelledAt: string | null;
+  startsAt: string | null;
+  durationMinutes: number | null;
+  expertName: string | null;
+  createdAt: string;
+}
+
+export interface OfficeHourPayout {
+  id: number;
+  bookingId: number;
+  expertUserId: number;
+  status: 'PENDING' | 'PAID' | 'REVERSED';
+  amountMinor: number;
+  platformAmountMinor: number;
+  currency: string;
+  reversal: boolean;
+  createdAt: string;
+}
+
+/** POST /slots/{id}/book — the PENDING booking plus its provider order. */
+export interface BookingAttempt {
+  bookingId: number;
+  provider: string;
+  orderId: string | null;
+  amountMinor: number;
+  currency: string;
+  status: string;
+}
+
+export interface ExpertInfo {
+  userId: number;
+  displayName: string | null;
+  expert: boolean;
+}
+
+export function listOpenSlots() {
+  return request<OfficeHourSlot[]>('/api/office-hours/slots');
+}
+
+export function listMySlots() {
+  return request<OfficeHourSlot[]>('/api/office-hours/slots/mine');
+}
+
+export function createSlot(input: {
+  startsAt: string;
+  durationMinutes: number;
+  priceMinor: number;
+  currency?: string;
+}) {
+  return request<OfficeHourSlot>('/api/office-hours/slots', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function cancelSlot(id: number) {
+  return request<OfficeHourSlot>(`/api/office-hours/slots/${id}/cancel`, {
+    method: 'POST',
+  });
+}
+
+export function bookSlot(id: number) {
+  return request<BookingAttempt>(`/api/office-hours/slots/${id}/book`, {
+    method: 'POST',
+  });
+}
+
+export function listMyBookings() {
+  return request<{
+    asMember: OfficeHourBooking[];
+    asExpert: OfficeHourBooking[];
+  }>('/api/office-hours/bookings');
+}
+
+export function cancelBooking(id: number) {
+  return request<OfficeHourBooking>(`/api/office-hours/bookings/${id}/cancel`, {
+    method: 'POST',
+  });
+}
+
+export function setMeetingLink(id: number, meetingLink: string) {
+  return request<OfficeHourBooking>(`/api/office-hours/bookings/${id}/meeting-link`, {
+    method: 'PUT',
+    body: JSON.stringify({ meetingLink }),
+  });
+}
+
+export function listOfficeHourPayouts() {
+  return request<OfficeHourPayout[]>('/api/office-hours/payouts');
+}
+
+export function markPayoutPaid(id: number) {
+  return request<OfficeHourPayout>(`/api/office-hours/payouts/${id}/paid`, {
+    method: 'POST',
+  });
+}
+
+export function fetchCommissionBp() {
+  return request<{ commissionBp: number }>('/api/office-hours/commission');
+}
+
+export function saveCommissionBp(commissionBp: number) {
+  return request<{ commissionBp: number }>('/api/office-hours/commission', {
+    method: 'PUT',
+    body: JSON.stringify({ commissionBp }),
+  });
+}
+
+export function listExperts() {
+  return request<ExpertInfo[]>('/api/office-hours/experts');
+}
+
+export function setExpert(userId: number, expert: boolean) {
+  return request<{ userId: number; expert: boolean }>(
+    `/api/office-hours/members/${userId}/expert`,
+    { method: 'PUT', body: JSON.stringify({ expert }) },
+  );
+}
+
+// ------------------------------------------------------------ smart intros
+
+export interface IntroProfile {
+  userId: number;
+  displayName: string | null;
+  offeringTags: string[];
+  lookingForTags: string[];
+  industry: string | null;
+}
+
+export interface IntroSuggestion {
+  userId: number;
+  displayName: string | null;
+  reason: string;
+  percent: number;
+  pendingWithYou: boolean;
+}
+
+export interface IntroRequestView {
+  id: number;
+  fromUserId: number;
+  fromName: string | null;
+  toUserId: number;
+  toName: string | null;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  reason: string | null;
+  /** Filled only after the other side accepts (and only for the pair). */
+  contactEmail: string | null;
+  createdAt: string;
+}
+
+export function fetchIntroProfile() {
+  return request<IntroProfile>('/api/intros/profile');
+}
+
+export function saveIntroProfile(input: {
+  offeringTags: string[];
+  lookingForTags: string[];
+  industry: string | null;
+}) {
+  return request<IntroProfile>('/api/intros/profile', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export function listIntroSuggestions() {
+  return request<IntroSuggestion[]>('/api/intros/suggestions');
+}
+
+export function requestIntro(userId: number, reason?: string) {
+  return request<IntroRequestView>('/api/intros/requests', {
+    method: 'POST',
+    body: JSON.stringify(reason ? { targetUserId: userId, reason } : { targetUserId: userId }),
+  });
+}
+
+export function listIncomingIntroRequests() {
+  return request<IntroRequestView[]>('/api/intros/requests/incoming');
+}
+
+export function listOutgoingIntroRequests() {
+  return request<IntroRequestView[]>('/api/intros/requests/outgoing');
+}
+
+export function acceptIntroRequest(id: number) {
+  return request<IntroRequestView>(`/api/intros/requests/${id}/accept`, {
+    method: 'POST',
+  });
+}
+
+export function declineIntroRequest(id: number) {
+  return request<IntroRequestView>(`/api/intros/requests/${id}/decline`, {
+    method: 'POST',
+  });
+}
+
+// ----------------------------------------------------------- mastermind pods
+
+export interface PodMemberLine {
+  userId: number;
+  displayName: string | null;
+  streak: number | null;
+}
+
+export interface PodView {
+  id: number;
+  name: string;
+  industry: string | null;
+  members: PodMemberLine[];
+}
+
+export interface PodDraftView {
+  industry: string | null;
+  userIds: number[];
+  names: (string | null)[];
+}
+
+export interface PodDraftInput {
+  industry?: string | null;
+  userIds: number[];
+}
+
+export interface PodCheckinView {
+  id: number;
+  podId: number;
+  userId: number;
+  displayName: string | null;
+  weekStart: string;
+  wins: string;
+  blockers: string;
+  ask: string | null;
+}
+
+export function generatePodPreview() {
+  return request<PodDraftView[]>('/api/pods/generate', { method: 'POST' });
+}
+
+export function publishPods(input: {
+  namePrefix?: string;
+  drafts?: PodDraftInput[];
+}) {
+  return request<PodView[]>('/api/pods/publish', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function listMyPods() {
+  return request<PodView[]>('/api/pods');
+}
+
+export function fetchPod(id: number) {
+  return request<PodView>(`/api/pods/${id}`);
+}
+
+export function submitPodCheckin(
+  podId: number,
+  input: { weekStart?: string; wins: string; blockers: string; ask?: string | null },
+) {
+  return request<PodCheckinView>(`/api/pods/${podId}/checkins`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPodCheckins(podId: number) {
+  return request<PodCheckinView[]>(`/api/pods/${podId}/checkins`);
+}

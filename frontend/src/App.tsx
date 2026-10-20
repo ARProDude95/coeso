@@ -14,6 +14,9 @@ import SettingsPage from './pages/SettingsPage';
 import PricingPage from './pages/PricingPage';
 import ReportsPage from './pages/ReportsPage';
 import PerformancePage from './pages/PerformancePage';
+import OfficeHoursPage from './pages/OfficeHoursPage';
+import IntrosPage from './pages/IntrosPage';
+import PodsPage from './pages/PodsPage';
 
 /**
  * Route guards:
@@ -86,6 +89,9 @@ export default function App() {
         <Route path="/offers" element={<OffersPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/performance" element={<PerformancePage />} />
+        <Route path="/office-hours" element={<OfficeHoursPage />} />
+        <Route path="/intros" element={<IntrosPage />} />
+        <Route path="/pods" element={<PodsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/pricing" element={<PricingPage />} />
       </Route>
