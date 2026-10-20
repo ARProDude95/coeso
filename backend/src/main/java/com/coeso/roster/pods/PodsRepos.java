@@ -3,6 +3,7 @@ package com.coeso.roster.pods;
 import com.coeso.roster.entity.Pod;
 import com.coeso.roster.entity.PodCheckin;
 import com.coeso.roster.entity.PodMember;
+import com.coeso.roster.entity.PodMessage;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.repository.query.Param;
 
@@ -47,5 +48,11 @@ public final class PodsRepos {
         // Streak: the most recent week the member checked in on.
         java.util.Optional<PodCheckin> findFirstByWorkspaceIdAndPodIdAndUserIdOrderByWeekStartDesc(
                 @Param("workspaceId") Long workspaceId, Long podId, Long userId);
+    }
+
+    public interface PodMessageRepository extends JpaRepository<PodMessage, Long> {
+
+        java.util.List<PodMessage> findByWorkspaceIdAndPodIdOrderByCreatedAtAscIdAsc(
+                @Param("workspaceId") Long workspaceId, Long podId);
     }
 }

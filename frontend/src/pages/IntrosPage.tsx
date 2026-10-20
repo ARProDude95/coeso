@@ -57,6 +57,7 @@ function ProfileCard() {
   const [offering, setOffering] = useState<string | null>(null);
   const [looking, setLooking] = useState<string | null>(null);
   const [industry, setIndustry] = useState<string | null>(null);
+  const [stage, setStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const save = useMutation({
@@ -65,6 +66,7 @@ function ProfileCard() {
         offeringTags: parseTags(offering ?? data?.offeringTags.join(', ') ?? ''),
         lookingForTags: parseTags(looking ?? data?.lookingForTags.join(', ') ?? ''),
         industry: (industry ?? data?.industry ?? '').trim() || null,
+        revenueStage: (stage ?? data?.revenueStage ?? '').trim() || null,
       }),
     onSuccess: () => {
       setError(null);
@@ -109,6 +111,14 @@ function ProfileCard() {
             placeholder="e.g. Fintech"
             value={industry ?? data?.industry ?? ''}
             onChange={(e) => setIndustry(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>Revenue stage</span>
+          <input
+            placeholder="e.g. Seed, Series B, ₹1–5Cr"
+            value={stage ?? data?.revenueStage ?? ''}
+            onChange={(e) => setStage(e.target.value)}
           />
         </label>
       </div>

@@ -189,7 +189,7 @@ All workspace-scoped endpoints require `Authorization: Bearer <token>` and
 | office hours | `GET /api/office-hours/slots` (open), `/slots/mine`, `POST /slots`, `POST /slots/{id}/cancel`, `POST /slots/{id}/book`; `GET /bookings` (`asMember`/`asExpert`), `POST /bookings/{id}/cancel`, `PUT /bookings/{id}/meeting-link`; `GET /payouts`, `POST /payouts/{id}/paid`; `GET/PUT /commission`; `GET /experts`, `PUT /members/{userId}/expert` | slots: expert; bookings: any member (own rows); payouts: manager+; commission: owner; expert flag: admin+ |
 | payments webhook | `POST /api/payments/webhooks/razorpay` — HMAC verified over the raw body *before* parsing, idempotent, unknown events acknowledged-and-ignored | public (outside the JWT chain) |
 | intros | `GET/PUT /api/intros/profile`, `GET /api/intros/suggestions`, `POST /api/intros/requests` (`{targetUserId, reason?}`), `GET /api/intros/requests/incoming|outgoing`, `POST /api/intros/requests/{id}/accept|decline` | any member (accept/decline: target only, server-enforced) |
-| mastermind pods | `POST /api/pods/generate`, `POST /api/pods/publish`, `GET /api/pods`, `GET /api/pods/{id}`, `POST/GET /api/pods/{id}/checkins` | generate/publish: admin+; reads: own pods (admins all); check-in: pod members |
+| mastermind pods | `POST /api/pods/generate`, `POST /api/pods/publish`, `GET /api/pods`, `GET /api/pods/{id}`, `POST/GET /api/pods/{id}/checkins`, `POST/GET /api/pods/{id}/messages` | generate/publish: admin+; reads: own pods (admins all); check-in & thread: pod members |
 
 Every Phase 7 endpoint is **[PRO]**: on the free plan it answers `402` with
 `code: PRO_FEATURE_REQUIRED` and a message that names the upgrade, and the UI
@@ -343,8 +343,9 @@ ledger rows paid. UI at `/office-hours`.
 
 ## Smart intros
 
-`member_profiles` (V8) stores each member's offering tags, looking-for tags
-and industry. `IntrosScorer` ranks needs against offers within the same
+`member_profiles` (V8; revenue-stage column added in V10) stores each
+member's offering tags, looking-for tags, industry and a revenue stage.
+`IntrosScorer` ranks needs against offers within the same
 space: bidirectional tag overlap is required, shared industry adds 20 points,
 and up to 5 suggestions come back each with a one-line reason. `/intros`
 shows them with a "Request intro" action — max 3 pending per member,
@@ -354,12 +355,13 @@ notifier seam, and **contact details are revealed only after they accept**
 
 ## Mastermind pods
 
-Admins generate a deterministic, industry-adjacent preview of the workspace's
-active members into pods of ~5–8, may adjust the drafts by hand, then
-publish — the preview grouping is exactly what publish writes, and the
-previous generation is archived. Each pod is private to its members (and
-admins): a roster with per-member attendance streaks plus one check-in per
-ISO week (wins / blockers / ask) feeding a recent-activity feed. UI at
+Admins generate a deterministic, industry- then revenue-stage-adjacent
+preview of the workspace's active members into pods of ~5–8, may adjust
+the drafts by hand, then publish — the preview grouping is exactly what
+publish writes, and the previous generation is archived. Each pod is
+private to its members (and admins): a roster with per-member attendance
+streaks, a private message thread (`pod_messages`, V10), plus one check-in
+per ISO week (wins / blockers / ask) feeding a recent-activity feed. UI at
 `/pods`.
 
 ## Database
@@ -406,7 +408,7 @@ ISO week (wins / blockers / ask) feeding a recent-activity feed. UI at
 | `RazorpayWebhookTest` | Razorpay webhook: signature verified over the raw body before parse, idempotent re-delivery, failure/cancellation/renewal transitions, unknown events acknowledged |
 | `OfficeHoursTest` | expert gating on every slot/booking surface, booking confirmed only by the verified webhook, cancel/refund state machine with ledger reversals, per-space commission, tenant isolation |
 | `IntrosTest` | tag-overlap ranking with reasons, suggestion cap + duplicate/self refusal, max 3 pending requests, contact revealed only to the accepted pair, cross-workspace isolation |
-| `PodsTest` | deterministic preview == published output, manual draft overrides + previous-generation archive, check-in membership / one-per-week / streak rules, tenant isolation |
+| `PodsTest` | deterministic preview == published output (industry + revenue-stage grouping), manual draft overrides + previous-generation archive, check-in membership / one-per-week / streak rules, private-thread privacy (members + admins, tenant-scoped), tenant isolation |
 | frontend community features | office-hours/intros/pods pages against the mocked API: exact request payloads, accept/contact reveal, book & pay flow, meeting link save, check-in body, role-gated generate panel |
 | frontend `src/test/` | roster/offer pages against the mocked API, billing upgrade/plan flows, Discord login + callback, reports rendering, branding/discord settings forms, bench-aging pills, CSV export download, activity feed paging, Phase 6 filters/profile form/suggested-reps panel, Phase 7 PRO gating, role tabs, minor-unit money conversion, payout batching, metric management |
 

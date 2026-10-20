@@ -18,7 +18,7 @@ service reads the workspace from `TenantContext`, never from the request body.
 | 1 | Paywall hardening — Razorpay provider behind the `BillingProvider` seam: signature verified before parse, idempotent webhook (payment success / failure / cancellation / renewal), access gating already covered by existing role matrix | `b80cc09` | `RazorpayWebhookTest` (7), `Phase4BillingTest` (7) |
 | 2 | Paid office hours — expert flag on memberships, slots with duration + INR price, PENDING booking → Razorpay order → confirmed only by verified webhook, cancellation/refund state machine with append-only payout ledger (negative refund reversals), per-space commission (`workspaces.office_hours_commission_bp`, default 1000 = 10%), pasteable meeting link, audit rows | `530f1a2` | `OfficeHoursTest` (6) |
 | 3 | Smart intros — `member_profiles` (offering / looking-for tags + industry), bidirectional tag-overlap scorer (+20 shared industry), ≤5 suggestions with one-line reason, max 3 pending requests, contact revealed only on accept to the pair, Discord notifications, cross-workspace isolation | `09bbece` | `IntrosTest` (4) |
-| 4 | Mastermind pods — deterministic industry-adjacent preview (preview == publish output), manual draft overrides validated against active membership, previous generation archived on republish, private pod reads (members + admins), weekly wins/blockers/ask check-ins (one per ISO week → 409), consecutive-Monday attendance streaks | `9a7f92b` | `PodsTest` (4) |
+| 4 | Mastermind pods — deterministic industry- then revenue-stage-adjacent preview (preview == publish output; `member_profiles.revenue_stage`, V10), manual draft overrides validated against active membership, previous generation archived on republish, private pod reads (members + admins), private message thread (`pod_messages`, V10), weekly wins/blockers/ask check-ins (one per ISO week → 409), consecutive-Monday attendance streaks | `9a7f92b` + V10 commit | `PodsTest` (6) |
 | 5 | Frontend UIs — `/office-hours`, `/intros`, `/pods` pages + nav entries + typed API client, matching existing design (cards, lookup rows, pills, btn classes) | `bfd4f7f` | `community-features.test.tsx` (7) |
 
 **Verification status:**
@@ -64,10 +64,15 @@ service reads the workspace from `TenantContext`, never from the request body.
   unset — same convention as Stripe).
 - **Meeting link** is a free-text URL the expert pastes; no video-provider
   integration.
-- **Pod size** target 5–8 with near-equal chunking (n/6 rounded); members
-  without an industry profile group into the "general" bucket; pods < 2
-  members are refused on publish; validation checks *active membership*, not
-  profile presence.
+- **Pod size** target 5–8 with near-equal chunking (n/6 rounded); grouping
+  sorts **industry-major then by revenue stage** (both live on
+  `member_profiles`; the stage column arrived in V10 alongside the pod
+  thread). Members without either profile dimension group into the
+  "general" bucket; pods < 2 members are refused on publish; validation
+  checks *active membership*, not profile presence.
+- **Pod thread**: `pod_messages` (V10) is the spec's "private thread" —
+  plain messages scoped to the pod (members + workspace admins), no
+  replies/reactions (not specified).
 - **Intro contact reveal**: the accepted pair sees each other's login email
   (the only contact field the schema has).
 - **Check-in week** normalizes any date to its ISO Monday; duplicate week →

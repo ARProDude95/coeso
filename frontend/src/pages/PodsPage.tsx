@@ -7,7 +7,9 @@ import {
   generatePodPreview,
   listMyPods,
   listPodCheckins,
+  listPodMessages,
   listWorkspaces,
+  postPodMessage,
   publishPods,
   submitPodCheckin,
 } from '../api';
@@ -172,6 +174,19 @@ function PodCard({
     queryKey: ['pods', 'checkins', podId],
     queryFn: () => listPodCheckins(podId),
   });
+  const { data: thread } = useQuery({
+    queryKey: ['pods', 'messages', podId],
+    queryFn: () => listPodMessages(podId),
+  });
+
+  const [message, setMessage] = useState('');
+  const post = useMutation({
+    mutationFn: () => postPodMessage(podId, message.trim()),
+    onSuccess: () => {
+      setMessage('');
+      queryClient.invalidateQueries({ queryKey: ['pods', 'messages', podId] });
+    },
+  });
 
   const submit = useMutation({
     mutationFn: () =>
@@ -272,6 +287,46 @@ function PodCard({
           ))}
         </>
       )}
+
+      <h4>Thread</h4>
+      {(thread?.length ?? 0) === 0 && (
+        <p className="muted">No messages yet — start the conversation.</p>
+      )}
+      {thread?.map((m) => (
+        <div className="lookup-row" key={m.id}>
+          <span className="name">
+            {m.displayName ?? `Member #${m.userId}`}
+            <span className="muted">
+              {' '}
+              — {new Date(m.createdAt).toLocaleString()}
+            </span>
+          </span>
+          <span className="muted">{m.body}</span>
+        </div>
+      ))}
+      <div className="field-row">
+        <label className="field">
+          <span>Message the pod</span>
+          <textarea
+            rows={2}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Share an update, resource, or question…"
+          />
+        </label>
+      </div>
+      {post.isError && (
+        <p className="error-text">
+          {post.error instanceof ApiError ? post.error.message : 'Could not post.'}
+        </p>
+      )}
+      <button
+        className="btn btn-sm"
+        disabled={post.isPending || !message.trim()}
+        onClick={() => post.mutate()}
+      >
+        {post.isPending ? 'Posting…' : 'Post'}
+      </button>
     </div>
   );
 }

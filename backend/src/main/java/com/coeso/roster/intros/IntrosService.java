@@ -33,11 +33,12 @@ import org.springframework.stereotype.Service;
 public class IntrosService {
 
     public record ProfileRequest(List<String> offeringTags, List<String> lookingForTags,
-                                 String industry) {
+                                 String industry, String revenueStage) {
     }
 
     public record ProfileView(Long userId, String displayName, List<String> offeringTags,
-                              List<String> lookingForTags, String industry) {
+                              List<String> lookingForTags, String industry,
+                              String revenueStage) {
     }
 
     /** One suggestion row: partner plus the why. */
@@ -82,7 +83,7 @@ public class IntrosService {
         MemberProfile profile = profiles.findByWorkspaceIdAndUserId(ws, userId)
                 .orElse(null);
         return profile == null
-                ? new ProfileView(userId, displayName(userId), List.of(), List.of(), null)
+                ? new ProfileView(userId, displayName(userId), List.of(), List.of(), null, null)
                 : toProfileView(profile);
     }
 
@@ -101,6 +102,12 @@ public class IntrosService {
         if (industry != null && industry.length() > 80) {
             throw new BadRequestException("industry is too long (max 80 chars)");
         }
+        String revenueStage = request.revenueStage() == null ? null
+                : request.revenueStage().trim().isEmpty() ? null
+                        : request.revenueStage().trim();
+        if (revenueStage != null && revenueStage.length() > 40) {
+            throw new BadRequestException("revenueStage is too long (max 40 chars)");
+        }
 
         MemberProfile profile = profiles.findByWorkspaceIdAndUserId(ws, userId)
                 .orElseGet(() -> {
@@ -112,6 +119,7 @@ public class IntrosService {
         profile.setOfferingTags(toJson(offering));
         profile.setLookingForTags(toJson(lookingFor));
         profile.setIndustry(industry);
+        profile.setRevenueStage(revenueStage);
         profiles.save(profile);
         audit.record("UPDATE", "member_profile", profile.getId(),
                 Map.of("event", "intros_profile_saved",
@@ -298,7 +306,7 @@ public class IntrosService {
     private ProfileView toProfileView(MemberProfile profile) {
         return new ProfileView(profile.getUserId(), displayName(profile.getUserId()),
                 readTags(profile.getOfferingTags()), readTags(profile.getLookingForTags()),
-                profile.getIndustry());
+                profile.getIndustry(), profile.getRevenueStage());
     }
 
     private List<String> readTags(String json) {

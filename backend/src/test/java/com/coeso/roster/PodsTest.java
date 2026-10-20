@@ -214,6 +214,93 @@ class PodsTest extends IntegrationTest {
                 .andExpect(jsonPath("$.id").value((int) podA));
     }
 
+    @Test
+    void podsGroupByIndustryAndRevenueStage() throws Exception {
+        Account owner = register("pd-stage");
+        long ws = createWorkspace(owner, "Pods Stage " + sfx, null);
+        // The owner is an active member too; give them a profile so they
+        // don't fall into the "general" bucket and mix the labels.
+        apiPut(owner, ws, "/api/intros/profile",
+                "{\"industry\":\"Fintech\",\"revenueStage\":\"Growth\","
+                        + "\"offeringTags\":[\"lead\"]}")
+                .andExpect(status().isOk());
+        // 12 Fintech members: half "Growth", half "Seed" — the stage must
+        // split them into stage-labelled pods within the industry.
+        for (int i = 0; i < 12; i++) {
+            Account m = register("pd-st" + i);
+            addMember(ws, m.userId(), WorkspaceRole.MANAGER);
+            String stage = i % 2 == 0 ? "Growth" : "Seed";
+            apiPut(m, ws, "/api/intros/profile",
+                    "{\"industry\":\"Fintech\",\"revenueStage\":\"" + stage
+                            + "\",\"offeringTags\":[\"t" + i + "\"]}")
+                    .andExpect(status().isOk());
+        }
+
+        var preview = read(apiPost(owner, ws, "/api/pods/generate", null).andReturn());
+        assertThat(preview.size()).isEqualTo(2);
+        assertThat(preview.get(0).get("industry").asText()).isEqualTo("Fintech · Growth");
+        assertThat(preview.get(1).get("industry").asText()).isEqualTo("Fintech · Seed");
+        assertThat(preview.get(0).get("userIds").size()).isEqualTo(7);
+        assertThat(preview.get(1).get("userIds").size()).isEqualTo(6);
+
+        // Publishing carries the stage labels through.
+        var published = read(apiPost(owner, ws, "/api/pods/publish", "{}").andReturn());
+        assertThat(published.get(0).get("name").asText()).isNotNull();
+        assertThat(published.toString()).contains("Fintech · Growth").contains("Fintech · Seed");
+    }
+
+    @Test
+    void podThreadsArePrivateAndValidated() throws Exception {
+        Account owner = register("pd-thr");
+        long ws = createWorkspace(owner, "Pods Thread " + sfx, null);
+        Account m1 = register("pd-thr-m1");
+        addMember(ws, m1.userId(), WorkspaceRole.MANAGER);
+        Account outsider = register("pd-thr-out");
+        addMember(ws, outsider.userId(), WorkspaceRole.MANAGER);
+        Account admin = register("pd-thr-adm");
+        addMember(ws, admin.userId(), WorkspaceRole.ADMIN);
+
+        String publish = "{\"drafts\":[{\"industry\":\"Ops\",\"userIds\":["
+                + owner.userId() + "," + m1.userId() + "]}]}";
+        var pods = read(apiPost(owner, ws, "/api/pods/publish", publish).andReturn());
+        long podId = pods.get(0).get("id").asLong();
+
+        // A workspace member outside the pod is refused; admins may read.
+        apiGet(outsider, ws, "/api/pods/" + podId + "/messages")
+                .andExpect(status().isForbidden());
+        apiPost(outsider, ws, "/api/pods/" + podId + "/messages",
+                "{\"body\":\"hi\"}").andExpect(status().isForbidden());
+        apiGet(admin, ws, "/api/pods/" + podId + "/messages").andExpect(status().isOk());
+
+        // Validation: blank body and oversized body are refused.
+        apiPost(m1, ws, "/api/pods/" + podId + "/messages", "{\"body\":\"   \"}")
+                .andExpect(status().isBadRequest());
+        StringBuilder big = new StringBuilder();
+        for (int i = 0; i < 1001; i++) {
+            big.append('x');
+        }
+        apiPost(m1, ws, "/api/pods/" + podId + "/messages",
+                "{\"body\":\"" + big + "\"}").andExpect(status().isBadRequest());
+
+        // A member posts; the thread shows it with names, oldest first.
+        apiPost(m1, ws, "/api/pods/" + podId + "/messages",
+                "{\"body\":\"Kicking off — meet Tuesdays\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Kicking off — meet Tuesdays"))
+                .andExpect(jsonPath("$.displayName").isNotEmpty());
+        var thread = read(apiGet(owner, ws, "/api/pods/" + podId + "/messages").andReturn());
+        assertThat(thread.size()).isEqualTo(1);
+        assertThat(thread.get(0).get("body").asText()).isEqualTo("Kicking off — meet Tuesdays");
+
+        // Another workspace cannot see the thread at all.
+        Account ownerB = register("pd-thr-b");
+        long wsB = createWorkspace(ownerB, "Pods Thread B " + sfx, null);
+        apiGet(ownerB, wsB, "/api/pods/" + podId + "/messages")
+                .andExpect(status().isNotFound());
+        apiPost(ownerB, wsB, "/api/pods/" + podId + "/messages",
+                "{\"body\":\"peek\"}").andExpect(status().isNotFound());
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private String checkinBody(LocalDate weekStart, String wins, String blockers) {

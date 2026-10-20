@@ -225,6 +225,21 @@ describe('PodsPage', () => {
     // matches the first prefix whose methods fit.
     const requests = mockFetch({
       '/api/workspaces': { body: [{ id: 1, name: 'Acme', slug: 'acme', role: 'MANAGER' }] },
+      // The thread route must precede the generic pod-detail prefix.
+      '/api/pods/3/messages': [
+        { method: 'GET', body: [] },
+        {
+          method: 'POST',
+          body: {
+            id: 1,
+            podId: 3,
+            userId: 1,
+            displayName: 'You',
+            body: 'Standup Mondays 9am',
+            createdAt: '2026-10-20T10:00:00',
+          },
+        },
+      ],
       '/api/pods/3/checkins': [
         { body: [] },
         {
@@ -264,6 +279,19 @@ describe('PodsPage', () => {
         blockers: 'Hiring',
         ask: null,
       });
+    });
+
+    // The private thread posts through the same pod scope.
+    await userEvent.type(
+      screen.getByPlaceholderText(/Share an update/i),
+      'Standup Mondays 9am',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Post' }));
+    await waitFor(() => {
+      const post = requests.find(
+        (r) => r.url === '/api/pods/3/messages' && r.method === 'POST',
+      );
+      expect(post?.body).toEqual({ body: 'Standup Mondays 9am' });
     });
   });
 

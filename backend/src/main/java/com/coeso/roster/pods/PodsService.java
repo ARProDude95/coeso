@@ -12,12 +12,14 @@ import com.coeso.roster.entity.MemberProfile;
 import com.coeso.roster.entity.Pod;
 import com.coeso.roster.entity.PodCheckin;
 import com.coeso.roster.entity.PodMember;
+import com.coeso.roster.entity.PodMessage;
 import com.coeso.roster.entity.User;
 import com.coeso.roster.intros.IntrosRepos.MemberProfileRepository;
 import com.coeso.roster.repo.Repositories.MembershipRepository;
 import com.coeso.roster.repo.Repositories.UserRepository;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -63,12 +65,30 @@ public class PodsService {
                               String ask) {
     }
 
+    /** One post in the pod's private thread. */
+    public record MessageRequest(String body) {
+    }
+
+    public record MessageView(Long id, Long podId, Long userId, String displayName,
+                              String body, LocalDateTime createdAt) {
+    }
+
     private static final int MAX_POD_NAME_LENGTH = 80;
     private static final int MAX_TEXT_LENGTH = 1000;
+    private static final int MAX_THREAD_MESSAGES = 200;
+
+    /**
+     * Joins the two grouping dimensions (industry, revenue stage) into one
+     * sort key: a control-char separator keeps the key sorting industry-major
+     * ("Fintech\u0001Seed" sorts with the rest of "Fintech") while still
+     * letting same-industry members cluster by stage.
+     */
+    static final char GROUP_SEP = '\u0001';
 
     private final PodsRepos.PodRepository pods;
     private final PodsRepos.PodMemberRepository podMembers;
     private final PodsRepos.PodCheckinRepository checkins;
+    private final PodsRepos.PodMessageRepository podMessages;
     private final MemberProfileRepository memberProfiles;
     private final UserRepository users;
     private final MembershipRepository memberships;
@@ -77,6 +97,7 @@ public class PodsService {
     public PodsService(PodsRepos.PodRepository pods,
                        PodsRepos.PodMemberRepository podMembers,
                        PodsRepos.PodCheckinRepository checkins,
+                       PodsRepos.PodMessageRepository podMessages,
                        MemberProfileRepository memberProfiles,
                        UserRepository users,
                        MembershipRepository memberships,
@@ -84,6 +105,7 @@ public class PodsService {
         this.pods = pods;
         this.podMembers = podMembers;
         this.checkins = checkins;
+        this.podMessages = podMessages;
         this.memberProfiles = memberProfiles;
         this.users = users;
         this.memberships = memberships;
@@ -99,7 +121,7 @@ public class PodsService {
      */
     public List<DraftView> generatePreview() {
         Long ws = TenantContext.requireWorkspaceId();
-        List<PodDraft> drafts = greedyGroup(activeMemberIds(ws), industryByUser(ws));
+        List<PodDraft> drafts = greedyGroup(activeMemberIds(ws), groupKeyByUser(ws));
         return drafts.stream().map(d -> new DraftView(d.industry(), d.userIds(),
                 d.userIds().stream().map(this::displayName).toList())).toList();
     }
@@ -113,7 +135,7 @@ public class PodsService {
     public List<PodView> publish(List<PodDraft> overrideDrafts, String namePrefix) {
         Long ws = TenantContext.requireWorkspaceId();
         List<PodDraft> drafts = overrideDrafts == null || overrideDrafts.isEmpty()
-                ? greedyGroup(activeMemberIds(ws), industryByUser(ws))
+                ? greedyGroup(activeMemberIds(ws), groupKeyByUser(ws))
                 : overrideDrafts;
 
         // Validate the batch: members known & unique & in this workspace.
@@ -271,6 +293,40 @@ public class PodsService {
                 .stream().limit(20).map(this::toCheckinView).toList();
     }
 
+    // ---------------------------------------------------------------- thread
+
+    /** The pod's private thread, oldest first (members + admins), capped. */
+    public List<MessageView> messages(Long podId) {
+        Long ws = TenantContext.requireWorkspaceId();
+        Long userId = requireActor();
+        requireVisiblePod(ws, podId, userId);
+        return podMessages.findByWorkspaceIdAndPodIdOrderByCreatedAtAscIdAsc(ws, podId)
+                .stream().limit(MAX_THREAD_MESSAGES).map(this::toMessageView).toList();
+    }
+
+    /** Posts to the pod's private thread (members + admins). */
+    public MessageView postMessage(Long podId, MessageRequest request) {
+        Long ws = TenantContext.requireWorkspaceId();
+        Long userId = requireActor();
+        requireVisiblePod(ws, podId, userId);
+        if (request == null || request.body() == null || request.body().isBlank()) {
+            throw new BadRequestException("body is required");
+        }
+        String body = request.body().trim();
+        if (body.length() > MAX_TEXT_LENGTH) {
+            throw new BadRequestException("body max " + MAX_TEXT_LENGTH + " chars");
+        }
+        PodMessage message = new PodMessage();
+        message.setWorkspaceId(ws);
+        message.setPodId(podId);
+        message.setUserId(userId);
+        message.setBody(body);
+        podMessages.save(message);
+        audit.record("CREATE", "pod_message", message.getId(),
+                Map.of("podId", podId, "length", body.length()));
+        return toMessageView(message);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private Pod requireVisiblePod(Long ws, Long podId, Long userId) {
@@ -287,15 +343,15 @@ public class PodsService {
     }
 
     /**
-     * Greedy grouping: members sorted industry-adjacent (unknown last) then
-     * chunked into near-equal pods aiming at 5-8. Deterministic given the
-     * same membership.
+     * Greedy grouping: members sorted industry-major, then by revenue stage
+     * within the industry (unknowns last), then chunked into near-equal pods
+     * aiming at 5-8. Deterministic given the same membership.
      */
     static List<PodDraft> greedyGroup(List<Long> activeMembers,
-                                      Map<Long, String> industryByUser) {
+                                      Map<Long, String> groupKeyByUser) {
         List<Long> sorted = new ArrayList<>(activeMembers);
         sorted.sort(Comparator
-                .comparing((Long id) -> industryByUser.getOrDefault(id, "general"))
+                .comparing((Long id) -> groupKeyByUser.getOrDefault(id, "general"))
                 .thenComparing(id -> id));
         int n = sorted.size();
         if (n < 2) {
@@ -311,13 +367,17 @@ public class PodsService {
             List<Long> chunk = new ArrayList<>(sorted.subList(cursor, cursor + size));
             cursor += size;
             Map<String, Long> counts = chunk.stream()
-                    .map(id -> industryByUser.getOrDefault(id, "general"))
+                    .map(id -> groupKeyByUser.getOrDefault(id, "general"))
                     .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
+            // Deterministic label even on exact ties: value desc, then key asc.
             String top = counts.entrySet().stream()
-                    .max(Map.Entry.comparingByValue()).map(Map.Entry::getKey)
+                    .max(Comparator.comparing((Map.Entry<String, Long> e) -> e.getValue())
+                            .thenComparing(Map.Entry::getKey))
+                    .map(Map.Entry::getKey)
                     .orElse("general");
             boolean mixed = counts.size() > 1;
-            drafts.add(new PodDraft(mixed ? top + " (mixed)" : top, chunk));
+            String label = displayLabel(top) + (mixed ? " (mixed)" : "");
+            drafts.add(new PodDraft(label, chunk));
         }
         return drafts;
     }
@@ -330,15 +390,40 @@ public class PodsService {
                 .toList();
     }
 
-    private Map<Long, String> industryByUser(Long ws) {
+    private Map<Long, String> groupKeyByUser(Long ws) {
         Map<Long, String> map = new TreeMap<>();
         for (MemberProfile profile : memberProfiles.findByWorkspaceIdAndUserIdIn(ws,
                 activeMemberIds(ws))) {
-            if (profile.getIndustry() != null && !profile.getIndustry().isBlank()) {
-                map.put(profile.getUserId(), profile.getIndustry().trim());
+            String industry = profile.getIndustry() == null || profile.getIndustry().isBlank()
+                    ? "general" : profile.getIndustry().trim();
+            String stage = profile.getRevenueStage() == null
+                    || profile.getRevenueStage().isBlank()
+                            ? null : profile.getRevenueStage().trim();
+            if (profile.getIndustry() == null && stage == null) {
+                continue; // neither dimension set: keep the "general" default
             }
+            map.put(profile.getUserId(), stage == null ? industry : industry + GROUP_SEP + stage);
         }
         return map;
+    }
+
+    /** "Fintech\u0001Seed" → "Fintech · Seed"; bare keys pass through. */
+    static String displayLabel(String groupKey) {
+        if (groupKey.indexOf(GROUP_SEP) < 0) {
+            return groupKey;
+        }
+        String[] parts = groupKey.split(String.valueOf(GROUP_SEP));
+        StringBuilder out = new StringBuilder();
+        for (String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            if (out.length() > 0) {
+                out.append(" · ");
+            }
+            out.append(part.trim());
+        }
+        return out.length() == 0 ? "general" : out.toString();
     }
 
     private boolean privileged() {
@@ -408,5 +493,10 @@ public class PodsService {
         return new CheckinView(checkin.getId(), checkin.getPodId(), checkin.getUserId(),
                 displayName(checkin.getUserId()), checkin.getWeekStart(),
                 checkin.getWins(), checkin.getBlockers(), checkin.getAsk());
+    }
+
+    private MessageView toMessageView(PodMessage message) {
+        return new MessageView(message.getId(), message.getPodId(), message.getUserId(),
+                displayName(message.getUserId()), message.getBody(), message.getCreatedAt());
     }
 }

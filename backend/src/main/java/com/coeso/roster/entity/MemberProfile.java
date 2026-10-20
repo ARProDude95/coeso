@@ -35,6 +35,10 @@ public class MemberProfile extends TimestampedTenantEntity {
     @Column(length = 80)
     private String industry;
 
+    /** Growth band for pod grouping, e.g. "Seed" / "Series B" / "₹1-5Cr". */
+    @Column(name = "revenue_stage", length = 40)
+    private String revenueStage;
+
     public Long getId() {
         return id;
     }
@@ -71,5 +75,13 @@ public class MemberProfile extends TimestampedTenantEntity {
 
     public void setIndustry(String industry) {
         this.industry = industry;
+    }
+
+    public String getRevenueStage() {
+        return revenueStage;
+    }
+
+    public void setRevenueStage(String revenueStage) {
+        this.revenueStage = revenueStage;
     }
 }

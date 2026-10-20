@@ -1175,6 +1175,8 @@ export interface IntroProfile {
   offeringTags: string[];
   lookingForTags: string[];
   industry: string | null;
+  /** Growth band (pod grouping), e.g. "Seed" / "Series B". */
+  revenueStage?: string | null;
 }
 
 export interface IntroSuggestion {
@@ -1206,6 +1208,7 @@ export function saveIntroProfile(input: {
   offeringTags: string[];
   lookingForTags: string[];
   industry: string | null;
+  revenueStage?: string | null;
 }) {
   return request<IntroProfile>('/api/intros/profile', {
     method: 'PUT',
@@ -1301,6 +1304,27 @@ export function listMyPods() {
 
 export function fetchPod(id: number) {
   return request<PodView>(`/api/pods/${id}`);
+}
+
+/** One post in a pod's private thread. */
+export interface PodMessageView {
+  id: number;
+  podId: number;
+  userId: number;
+  displayName: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export function listPodMessages(podId: number) {
+  return request<PodMessageView[]>(`/api/pods/${podId}/messages`);
+}
+
+export function postPodMessage(podId: number, body: string) {
+  return request<PodMessageView>(`/api/pods/${podId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
 }
 
 export function submitPodCheckin(

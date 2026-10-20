@@ -68,4 +68,17 @@ public class PodsController {
     public List<PodsService.CheckinView> recentCheckins(@PathVariable Long id) {
         return service.recentCheckins(id);
     }
+
+    /** The pod's private thread, oldest first (pod members + admins). */
+    @GetMapping("/{id}/messages")
+    public List<PodsService.MessageView> messages(@PathVariable Long id) {
+        return service.messages(id);
+    }
+
+    /** Posts to the pod's private thread (pod members + admins). */
+    @PostMapping("/{id}/messages")
+    public PodsService.MessageView postMessage(@PathVariable Long id,
+            @RequestBody PodsService.MessageRequest request) {
+        return service.postMessage(id, request);
+    }
 }
