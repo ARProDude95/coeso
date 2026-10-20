@@ -90,12 +90,12 @@ configured, webhooks are rejected, notifications are dropped).
 ```bash
 # backend
 cd backend
-mvn test                            # full suite (92 tests)
+mvn test                            # full suite (118 tests)
 mvn test -Dtest=Phase7PerformanceTest        # one class
 
 # frontend
 cd frontend
-npm test                            # vitest (33 tests)
+npm test                            # vitest (44 tests)
 npx tsc --noEmit                    # typecheck
 ```
 
@@ -186,6 +186,10 @@ All workspace-scoped endpoints require `Authorization: Bearer <token>` and
 | commission rules (P7) | `GET /api/commission-rules`, `POST` (upsert by scope), `DELETE /{id}` | manager+ |
 | leaderboard (P7) | `GET /api/leaderboard` (`period` = week/month/quarter, or custom `from`/`to`; `metricTypeId`) | any member (names masked per the workspace setting) |
 | workspace settings | `GET/PUT /api/workspaces/settings` (`leaderboardShowNames`) | read: any member; write: admin+ |
+| office hours | `GET /api/office-hours/slots` (open), `/slots/mine`, `POST /slots`, `POST /slots/{id}/cancel`, `POST /slots/{id}/book`; `GET /bookings` (`asMember`/`asExpert`), `POST /bookings/{id}/cancel`, `PUT /bookings/{id}/meeting-link`; `GET /payouts`, `POST /payouts/{id}/paid`; `GET/PUT /commission`; `GET /experts`, `PUT /members/{userId}/expert` | slots: expert; bookings: any member (own rows); payouts: manager+; commission: owner; expert flag: admin+ |
+| payments webhook | `POST /api/payments/webhooks/razorpay` — HMAC verified over the raw body *before* parsing, idempotent, unknown events acknowledged-and-ignored | public (outside the JWT chain) |
+| intros | `GET/PUT /api/intros/profile`, `GET /api/intros/suggestions`, `POST /api/intros/requests` (`{targetUserId, reason?}`), `GET /api/intros/requests/incoming|outgoing`, `POST /api/intros/requests/{id}/accept|decline` | any member (accept/decline: target only, server-enforced) |
+| mastermind pods | `POST /api/pods/generate`, `POST /api/pods/publish`, `GET /api/pods`, `GET /api/pods/{id}`, `POST/GET /api/pods/{id}/checkins` | generate/publish: admin+; reads: own pods (admins all); check-in: pod members |
 
 Every Phase 7 endpoint is **[PRO]**: on the free plan it answers `402` with
 `code: PRO_FEATURE_REQUIRED` and a message that names the upgrade, and the UI
@@ -315,13 +319,48 @@ below answers `402 PRO_FEATURE_REQUIRED` and the UI shows the upgrade notice.
 
 ## Billing (Phase 4)
 
-`BillingProvider` interface with a Stripe implementation and a documented
-Razorpay stub, selected by `BILLING_PROVIDER`. Checkout creates/updates the
-subscription row; verified webhooks (`Stripe-Signature` over the raw body) move
-it between trialing/active/past_due/canceled. Webhooks are idempotent via
+`BillingProvider` interface with Stripe and a Razorpay implementation,
+selected by `BILLING_PROVIDER`. Checkout creates/updates the subscription
+row; verified webhooks move it between trialing/active/past_due/canceled —
+Stripe via `Stripe-Signature` over the raw body, Razorpay via HMAC checked
+before the payload is parsed (`POST /api/payments/webhooks/razorpay`, which
+serves both subscriptions and office-hour bookings). Webhooks are idempotent via
 `billing_events` with a unique `(provider, event_id)` — duplicate deliveries
 are acknowledged but never re-applied. Downgrades beyond the target plan's
 limits are blocked with `409`; upgrades always pass.
+
+## Paid office hours
+
+Experts (owner/admin flag on the membership) publish timed slots with a
+duration and INR price; members book them through Razorpay. A booking is
+`PENDING` until the verified payment webhook confirms it, then `CONFIRMED`;
+cancellation and refund are status transitions on the same row, each with a
+reversing entry in the append-only payout ledger. Platform commission is per
+space (`workspaces.office_hours_commission_bp`, default 10%, owner-only edit,
+clamped 0–5000) and the expert/platform split is stored on every booking.
+Both sides see upcoming bookings with a pasteable meeting link; experts mark
+ledger rows paid. UI at `/office-hours`.
+
+## Smart intros
+
+`member_profiles` (V8) stores each member's offering tags, looking-for tags
+and industry. `IntrosScorer` ranks needs against offers within the same
+space: bidirectional tag overlap is required, shared industry adds 20 points,
+and up to 5 suggestions come back each with a one-line reason. `/intros`
+shows them with a "Request intro" action — max 3 pending per member,
+self/duplicate requests refused, the target is notified through the Discord
+notifier seam, and **contact details are revealed only after they accept**
+(and only to the pair).
+
+## Mastermind pods
+
+Admins generate a deterministic, industry-adjacent preview of the workspace's
+active members into pods of ~5–8, may adjust the drafts by hand, then
+publish — the preview grouping is exactly what publish writes, and the
+previous generation is archived. Each pod is private to its members (and
+admins): a roster with per-member attendance streaks plus one check-in per
+ISO week (wins / blockers / ask) feeding a recent-activity feed. UI at
+`/pods`.
 
 ## Database
 
@@ -364,6 +403,11 @@ limits are blocked with `409`; upgrades always pass.
 | `MatchScorerTest` | scoring weights, per-factor "why" strings, unset requirements score full, tier/edge cases, score clamped 0–100 |
 | `CommissionMathTest` | percent (basis points), flat and tiered math incl. band boundaries, open-ended last band, remainder splitting — all integer minor units |
 | `Phase7PerformanceTest` | every Phase 7 surface answers 402 on free and works after upgrade; reps log/edit only their own rows (7-day window); append-only ledger with reversing corrections, paid rows immutable; commission wiring per rule type; payouts batch one rep + one currency with CSV export; leaderboard periods + name masking; rep earnings isolation and cross-tenant scoping |
+| `RazorpayWebhookTest` | Razorpay webhook: signature verified over the raw body before parse, idempotent re-delivery, failure/cancellation/renewal transitions, unknown events acknowledged |
+| `OfficeHoursTest` | expert gating on every slot/booking surface, booking confirmed only by the verified webhook, cancel/refund state machine with ledger reversals, per-space commission, tenant isolation |
+| `IntrosTest` | tag-overlap ranking with reasons, suggestion cap + duplicate/self refusal, max 3 pending requests, contact revealed only to the accepted pair, cross-workspace isolation |
+| `PodsTest` | deterministic preview == published output, manual draft overrides + previous-generation archive, check-in membership / one-per-week / streak rules, tenant isolation |
+| frontend community features | office-hours/intros/pods pages against the mocked API: exact request payloads, accept/contact reveal, book & pay flow, meeting link save, check-in body, role-gated generate panel |
 | frontend `src/test/` | roster/offer pages against the mocked API, billing upgrade/plan flows, Discord login + callback, reports rendering, branding/discord settings forms, bench-aging pills, CSV export download, activity feed paging, Phase 6 filters/profile form/suggested-reps panel, Phase 7 PRO gating, role tabs, minor-unit money conversion, payout batching, metric management |
 
 ## Configuration
@@ -371,8 +415,9 @@ limits are blocked with `409`; upgrades always pass.
 All configuration comes from environment variables (see `.env.example`):
 `DB_URL/DB_USER/DB_PASSWORD`, `JWT_SECRET` (≥32 chars), `JWT_TTL_MINUTES`,
 `CORS_ALLOWED_ORIGINS`, `SERVER_PORT`, `APP_BASE_URL`,
-`BILLING_PROVIDER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (+ Razorpay
-placeholders, unimplemented), `DISCORD_CLIENT_ID/SECRET/REDIRECT_URI/BOT_TOKEN`,
+`BILLING_PROVIDER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`/`RAZORPAY_WEBHOOK_SECRET` (Razorpay is
+implemented — subscriptions and office-hour bookings), `DISCORD_CLIENT_ID/SECRET/REDIRECT_URI/BOT_TOKEN`,
 and test-only `ROSTER_TEST_DB_*`.
 
 ## Assumptions
