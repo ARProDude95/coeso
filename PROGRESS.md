@@ -81,6 +81,20 @@ service reads the workspace from `TenantContext`, never from the request body.
 ## Known issues
 
 - **None open in features 1–5.** All suites green at time of writing.
+- **Pre-existing (not from features 1–5): `WorkspacePurgeJob` FK failure.**
+  The Phase 1 purge job's `CHILD_TABLES` whitelist was never extended past
+  V1, so when a soft-deleted workspace has rows in a later table whose FK
+  parent *is* listed, the scheduled purge logs `Cannot delete or update a
+  parent row…` every run and that workspace's children are never purged.
+  Observed live 2026-10-20 after the smoke-test workspace cleanup
+  (`offer_required_skills` (V4) → `offers`). The same gap applies to
+  `rep_photos` (V4) and `commission_rules` / `activity_entries` /
+  `ledger_entries` (V5). Fix: insert the missing child tables into the
+  whitelist in dependency order (children before their parents), e.g.
+  `offer_required_skills` before `offers`, `rep_photos` before `reps`,
+  `activity_entries`/`ledger_entries` before `placements`. Not fixed here:
+  it predates this session's features and the offer area is being edited
+  by a parallel session.
 - The working tree contains **another session's uncommitted work** (Phase 8
   offer pipeline: `pipeline/`, `V6__offer_pipeline.sql`, `BoardPage.tsx`,
   Docker/Caddy deploy files, README/.env.example edits). It is *not* mine —
