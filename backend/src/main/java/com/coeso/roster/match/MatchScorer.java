@@ -31,9 +31,11 @@ import java.util.Set;
  *       timezone and the offer sets a window</td></tr>
  *   <tr><td>availability</td><td>16</td><td>available_from ≤ start date (or
  *       unset = immediately available); full when the offer sets no start date</td></tr>
- *   <tr><td>performance</td><td>8</td><td>past performance from Phase 7; no data
- *       yet, so the factor is <em>not applicable</em> and excluded from the
- *       denominator (weight stays 8 for when Phase 7 lands)</td></tr>
+ *   <tr><td>performance</td><td>8</td><td>rep's Phase 7 performance index —
+ *       quarter-to-date leaderboard activity, each metric scaled to the
+ *       workspace's best and averaged across the metrics with data (0–100 =
+ *       fraction of the workspace's best); excluded from the denominator when
+ *       the rep has no logged activity</td></tr>
  * </table>
  *
  * <p>A factor with no requirement on the offer scores full and says so in its
@@ -68,7 +70,9 @@ public final class MatchScorer {
         }
     }
 
-    /** One candidate rep. {@code performanceScore} stays null until Phase 7. */
+    /** One candidate rep. {@code performanceScore} is null when the rep has no
+     *  logged activity (or the workspace none), which excludes the performance
+     *  factor from the denominator. */
     public record Candidate(
             Long repId,
             Long verticalId,
@@ -230,11 +234,11 @@ public final class MatchScorer {
     }
 
     private static Factor performanceFactor(OfferNeeds needs, Candidate candidate) {
-        // Phase 7 will feed past performance; until then the factor has no data
-        // and is excluded from both sides of the ratio (weight reserved).
+        // No logged activity → no signal, not a penalty: the factor leaves
+        // both sides of the ratio, as it did before Phase 7 supplied data.
         if (candidate.performanceScore() == null) {
             return new Factor("performance", "Performance", WEIGHT_PERFORMANCE, 0,
-                    false, "No performance data yet (Phase 7)");
+                    false, "No activity logged yet");
         }
         double clamped = Math.max(0, Math.min(100, candidate.performanceScore()));
         int points = (int) Math.round(WEIGHT_PERFORMANCE * clamped / 100.0);

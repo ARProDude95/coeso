@@ -188,7 +188,7 @@ const factorSet = [
   { key: 'language', label: 'Language', weight: 8, points: 8, applicable: true, detail: 'Speaks English' },
   { key: 'timezone', label: 'Timezone', weight: 8, points: 8, applicable: true, detail: 'Works 08:00–17:00 UTC' },
   { key: 'availability', label: 'Availability', weight: 16, points: 16, applicable: true, detail: 'Available immediately' },
-  { key: 'performance', label: 'Performance', weight: 8, points: 0, applicable: false, detail: 'No performance data yet (Phase 7)' },
+  { key: 'performance', label: 'Performance', weight: 8, points: 0, applicable: false, detail: 'No activity logged yet' },
 ];
 
 function offerCard(overrides: Partial<Record<string, unknown>>) {
@@ -286,7 +286,7 @@ describe('OffersPage Suggested reps panel', () => {
     expect(screen.getAllByText('12/24').length).toBe(1); // strong row only
     expect(screen.getAllByText('0/24').length).toBe(1); // weak row got nothing
     expect(screen.getAllByText('Missing: sql (1/2)').length).toBe(2);
-    expect(screen.getAllByText('No performance data yet (Phase 7)').length).toBe(2);
+    expect(screen.getAllByText('No activity logged yet').length).toBe(2);
     expect(screen.getAllByText('—').length).toBeGreaterThan(0); // n/a factor
 
     // One-click place → the normal placements endpoint (its rules apply).

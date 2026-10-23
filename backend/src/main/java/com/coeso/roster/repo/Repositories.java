@@ -12,6 +12,8 @@ import com.coeso.roster.entity.Payout;
 import com.coeso.roster.entity.Invite;
 import com.coeso.roster.entity.Membership;
 import com.coeso.roster.entity.Offer;
+import com.coeso.roster.entity.OfferStatus;
+import com.coeso.roster.entity.PipelineStage;
 import com.coeso.roster.entity.Placement;
 import com.coeso.roster.entity.PlacementRequest;
 import com.coeso.roster.entity.Plan;
@@ -22,9 +24,12 @@ import com.coeso.roster.entity.User;
 import com.coeso.roster.entity.Vertical;
 import com.coeso.roster.entity.Workspace;
 import com.coeso.roster.entity.WorkspaceDiscord;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Repository interfaces. Tenant-owned repositories are only ever called from
@@ -71,6 +76,12 @@ public final class Repositories {
     }
 
     public interface OfferRepository extends JpaRepository<Offer, Long> {
+
+        /** Open deals of one workspace — the weekly digest's pipeline line. */
+        long countByWorkspaceIdAndStatus(Long workspaceId, OfferStatus status);
+    }
+
+    public interface PipelineStageRepository extends JpaRepository<PipelineStage, Long> {
     }
 
     public interface PlacementRepository extends JpaRepository<Placement, Long> {
@@ -91,6 +102,18 @@ public final class Repositories {
         List<Membership> findAllByUserId(Long userId);
 
         long countByWorkspaceId(Long workspaceId);
+
+        /** All memberships of one workspace — the engagement snapshot's member list. */
+        List<Membership> findByWorkspaceId(Long workspaceId);
+
+        /**
+         * Members whose user account was created at or after {@code since} —
+         * the weekly digest's "new members" line.
+         */
+        @Query("select m from Membership m join m.user u"
+                + " where m.workspaceId = :workspaceId and u.createdAt >= :since")
+        List<Membership> findByWorkspaceIdJoinedSince(
+                @Param("workspaceId") Long workspaceId, @Param("since") LocalDateTime since);
     }
 
     public interface InviteRepository extends JpaRepository<Invite, Long> {
@@ -127,6 +150,10 @@ public final class Repositories {
     }
 
     public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
+
+        /** Rows a member acted on after a point in time — the digest's activity window. */
+        List<AuditLog> findByWorkspaceIdAndCreatedAtAfter(
+                @Param("workspaceId") Long workspaceId, LocalDateTime after);
     }
 
     // --------------------------------------------------- Phase 7 repositories

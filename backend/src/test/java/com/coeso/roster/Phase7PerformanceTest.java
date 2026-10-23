@@ -1,6 +1,7 @@
 package com.coeso.roster;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,6 +28,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
  *   <li>payouts batch approved entries per rep with CSV export;</li>
  *   <li>leaderboard ranks by period+metric and masks other reps' names from
  *       reps until the workspace setting shares them;</li>
+ *   <li>the match score's performance factor is fed by that same leaderboard
+ *       activity (quarter-to-date index), and stays not-applicable when the
+ *       rep has no rows;</li>
  *   <li>reps can never see other reps' earnings.</li>
  * </ul>
  */
@@ -575,6 +579,71 @@ public class Phase7PerformanceTest extends IntegrationTest {
                 .andExpect(MockMvcResultMatchers.status().isBadRequest());
         apiGet(owner, ws, "/api/leaderboard?period=week&metricTypeId=" + calls)
                 .andExpect(MockMvcResultMatchers.status().isOk());
+    }
+
+    // --------------------------------------- match score × leaderboard bridge
+
+    @Test
+    void matchSuggestionsScoreRepsOnTheirLeaderboardActivity() throws Exception {
+        Account owner = register("p7-match");
+        long ws = uniqueWorkspace(owner, "Signal Co");
+        long client = repoClient(ws, "Signal Client");
+        long closingRep = repoRep(ws, "Closing Rep");
+        long quietRep = repoRep(ws, "Quiet Rep");
+        long offer = repoOffer(ws, client, "Signal Offer", 4);
+        long placement = repoPlacement(ws, offer, closingRep);
+        long calls = seededMetric(ws, "Calls");
+        upgradePlan(ws, "pro");
+
+        // Activity logged while placed — exactly the rows the leaderboard ranks.
+        logEntry(owner, ws, placement, calls, LocalDate.now().toString(), 60);
+        JsonNode board = read(apiGet(owner, ws,
+                        "/api/leaderboard?metricTypeId=" + calls)
+                .andExpect(MockMvcResultMatchers.status().isOk()).andReturn());
+        assertEquals(60, board.get("items").get(0).get("value").asLong(),
+                "the leaderboard ranks these rows");
+
+        // End the placement: the rep with history becomes an available candidate.
+        apiPost(owner, ws, "/api/placements/" + placement + "/end", "{}")
+                .andExpect(MockMvcResultMatchers.status().isOk());
+        JsonNode suggested = read(apiGet(owner, ws,
+                        "/api/offers/" + offer + "/suggested")
+                .andExpect(MockMvcResultMatchers.status().isOk()).andReturn());
+
+        JsonNode closed = rowNamed(suggested, "Closing Rep");
+        JsonNode quiet = rowNamed(suggested, "Quiet Rep");
+        assertNotNull(closed, "rep with history is suggested again");
+        assertNotNull(quiet, "second candidate present");
+
+        JsonNode wired = factorOf(closed, "performance");
+        assertTrue(wired.get("applicable").asBoolean(),
+                "activity makes the factor applicable: " + wired.toPrettyString());
+        // Sole metric with a single scorer → index 100 → all 8 weighted points.
+        assertEquals(8, wired.get("points").asInt());
+        assertTrue(wired.get("detail").asText().contains("past performance (100/100)"),
+                "detail reports the index: " + wired.get("detail").asText());
+
+        JsonNode untouched = factorOf(quiet, "performance");
+        assertFalse(untouched.get("applicable").asBoolean(),
+                "no rows in the window → factor excluded, not scored zero");
+    }
+
+    private static JsonNode rowNamed(JsonNode rows, String name) {
+        for (JsonNode row : rows) {
+            if (name.equals(row.get("repName").asText())) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    private static JsonNode factorOf(JsonNode row, String key) {
+        for (JsonNode factor : row.get("factors")) {
+            if (key.equals(factor.get("key").asText())) {
+                return factor;
+            }
+        }
+        throw new AssertionError("no factor '" + key + "' in " + row.toPrettyString());
     }
 
     // ------------------------------------------------------------ config & matrix

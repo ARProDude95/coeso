@@ -40,6 +40,9 @@ public final class OfficeHoursRepos {
 
         java.util.Optional<OfficeHourBooking> findFirstByWorkspaceIdAndSlotId(
                 @Param("workspaceId") Long workspaceId, Long slotId);
+
+        java.util.List<OfficeHourBooking> findByWorkspaceId(
+                @Param("workspaceId") Long workspaceId);
     }
 
     public interface PayoutLedgerEntryRepository

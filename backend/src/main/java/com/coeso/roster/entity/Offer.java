@@ -72,6 +72,21 @@ public class Offer extends TimestampedTenantEntity {
     @Column(nullable = false, length = 16)
     private OfferStatus status = OfferStatus.OPEN;
 
+    // -------------------------------------------------------- Phase 8 pipeline
+    // The kanban column this offer sits in (seeded; see PipelineStage).
+
+    @Column(name = "stage_id")
+    private Long stageId;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumns({
+            @JoinColumn(name = "workspace_id", referencedColumnName = "workspace_id",
+                    insertable = false, updatable = false),
+            @JoinColumn(name = "stage_id", referencedColumnName = "id",
+                    insertable = false, updatable = false)
+    })
+    private PipelineStage stage;
+
     // --------------------------------------------- Phase 6 offer requirements
     // Offer needs for match scoring; null anywhere means "no requirement".
 
@@ -231,5 +246,23 @@ public class Offer extends TimestampedTenantEntity {
 
     public void setStartDate(LocalDate startDate) {
         this.startDate = startDate;
+    }
+
+    public Long getStageId() {
+        return stageId;
+    }
+
+    public void setStageId(Long stageId) {
+        this.stageId = stageId;
+    }
+
+    public PipelineStage getStage() {
+        return stage;
+    }
+
+    /** Keeps the mapped column and the row association in step. */
+    public void setStage(PipelineStage stage) {
+        this.stage = stage;
+        this.stageId = stage == null ? null : stage.getId();
     }
 }

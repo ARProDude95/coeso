@@ -14,6 +14,13 @@ app:
   jwt:
     secret: test-secret-for-integration-tests-0123456789abcdef
     ttl-minutes: 60
+  digest:
+    # Schedule off in tests: DigestTest drives DigestService directly and
+    # asserts idempotency without racing a cron.
+    job-enabled: false
+  engagement:
+    # Schedule off in tests: EngagementTest drives EngagementService directly.
+    job-enabled: false
   discord:
     # Non-empty so the "configured" paths are exercised; all Discord HTTP
     # calls go through the stubbed DiscordApiClient, never to Discord.

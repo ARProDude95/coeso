@@ -9,6 +9,7 @@ import com.coeso.roster.entity.Rep;
 import com.coeso.roster.entity.RepLanguage;
 import com.coeso.roster.entity.RepPreferredVertical;
 import com.coeso.roster.entity.RepSkill;
+import com.coeso.roster.performance.LeaderboardService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
@@ -36,6 +37,11 @@ import org.springframework.stereotype.Service;
  * same bar as the rest of the roster/offer API). Tenant scoping comes from the
  * Hibernate filter (offer id is loaded through {@link ScopedQueries}, so an
  * id from another workspace is a 404, not a leak).
+ *
+ * <p>Performance: each candidate's match score now includes the Phase 7
+ * performance factor — the rep's quarter-to-date leaderboard index (see
+ * {@link LeaderboardService#performanceIndex}). Reps (or workspaces) with no
+ * logged activity keep the factor as not applicable, exactly as before.
  */
 @Service
 public class SuggestionService {
@@ -59,12 +65,14 @@ public class SuggestionService {
     }
 
     private final ScopedQueries scoped;
+    private final LeaderboardService leaderboard;
 
     @PersistenceContext
     private EntityManager entityManager;
 
-    public SuggestionService(ScopedQueries scoped) {
+    public SuggestionService(ScopedQueries scoped, LeaderboardService leaderboard) {
         this.scoped = scoped;
+        this.leaderboard = leaderboard;
     }
 
     @PreAuthorize("@roles.hasAtLeast('MANAGER')")
@@ -95,6 +103,10 @@ public class SuggestionService {
         Map<Long, Set<String>> languages = loadLanguages(repIds);
         Map<Long, Set<Long>> preferred = loadPreferredVerticals(repIds);
         Map<Long, Integer> levelRanks = experienceLevelRanksByLevelId();
+        // Phase 7 bridge: quarter-to-date leaderboard index per candidate —
+        // null means "no activity logged", which leaves the factor out of the
+        // denominator instead of scoring the rep zero.
+        Map<Long, Double> performance = leaderboard.performanceIndex(repIds);
         Map<Long, Rep> byId = new HashMap<>();
         candidates.forEach(rep -> byId.put(rep.getId(), rep));
 
@@ -115,7 +127,7 @@ public class SuggestionService {
                     languages.getOrDefault(rep.getId(), Set.of()),
                     utcOffsetMinutes(rep.getTimezone(), referenceDate),
                     rep.getAvailableFrom(),
-                    null); // past performance arrives with Phase 7
+                    performance.get(rep.getId()));
 
             MatchScorer.Score score = MatchScorer.score(needs, candidate);
             suggestions.add(new Suggestion(

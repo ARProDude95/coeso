@@ -35,11 +35,13 @@ import org.springframework.stereotype.Service;
 
 /**
  * Mastermind pods: an owner/admin generates a preview grouping of the
- * workspace's active members into pods of ~5-8 by industry (stable,
- * deterministic: members sorted industry-adjacent then chunked near-equal),
- * can adjust it manually, then publishes — publishing archives the previous
- * generation and writes the new pods in one shot. Each pod is private to its
- * members (and admins) and hosts weekly check-ins with an attendance streak.
+ * workspace's active members into pods of 2-8 balanced by industry *and*
+ * revenue stage (stable, deterministic: members sorted industry- then
+ * stage-adjacent, whole cohorts packed into pods; a cohort splits only when
+ * it exceeds a pod), can adjust it manually, then publishes — publishing
+ * archives the previous generation and writes the new pods in one shot.
+ * Each pod is private to its members (and admins) and hosts weekly
+ * check-ins with an attendance streak.
  */
 @Service
 public class PodsService {
@@ -47,13 +49,15 @@ public class PodsService {
     public record PodDraft(String industry, List<Long> userIds) {
     }
 
-    public record DraftView(String industry, List<Long> userIds, List<String> names) {
+    public record DraftView(String industry, List<Long> userIds, List<String> names,
+                            List<String> revenueStages) {
     }
 
     public record PodView(Long id, String name, String industry, List<MemberLine> members) {
     }
 
-    public record MemberLine(Long userId, String displayName, Integer streak) {
+    public record MemberLine(Long userId, String displayName, Integer streak,
+                             String revenueStage) {
     }
 
     public record CheckinRequest(LocalDate weekStart, String wins, String blockers,
@@ -76,6 +80,8 @@ public class PodsService {
     private static final int MAX_POD_NAME_LENGTH = 80;
     private static final int MAX_TEXT_LENGTH = 1000;
     private static final int MAX_THREAD_MESSAGES = 200;
+    /** Hard cap per pod (spec target is 5-8; 2 is the publish minimum). */
+    private static final int MAX_POD_SIZE = 8;
 
     /**
      * Joins the two grouping dimensions (industry, revenue stage) into one
@@ -115,15 +121,19 @@ public class PodsService {
     // ------------------------------------------------------------ generation
 
     /**
-     * Preview: active members grouped by industry. Deterministic — the same
-     * membership produces the same grouping, so "publish" without overrides
-     * writes exactly what the preview showed.
+     * Preview: active members grouped by industry and revenue stage, balanced
+     * so that revenue-stage cohorts stay together within a pod. Deterministic
+     * — the same membership produces the same grouping, so "publish" without
+     * overrides writes exactly what the preview showed.
      */
     public List<DraftView> generatePreview() {
         Long ws = TenantContext.requireWorkspaceId();
-        List<PodDraft> drafts = greedyGroup(activeMemberIds(ws), groupKeyByUser(ws));
+        List<Long> active = activeMemberIds(ws);
+        List<PodDraft> drafts = greedyGroup(active, groupKeyByUser(ws));
+        Map<Long, String> stages = revenueStagesFor(ws, active);
         return drafts.stream().map(d -> new DraftView(d.industry(), d.userIds(),
-                d.userIds().stream().map(this::displayName).toList())).toList();
+                d.userIds().stream().map(this::displayName).toList(),
+                d.userIds().stream().map(stages::get).toList())).toList();
     }
 
     /**
@@ -343,9 +353,20 @@ public class PodsService {
     }
 
     /**
-     * Greedy grouping: members sorted industry-major, then by revenue stage
-     * within the industry (unknowns last), then chunked into near-equal pods
-     * aiming at 5-8. Deterministic given the same membership.
+     * Greedy grouping that balances by revenue stage as well as industry:
+     * members are sorted industry-major, then by revenue stage within the
+     * industry (unknowns last), cut into whole cohorts of one group key
+     * ("industry\u0001stage"), and the cohorts are packed into pods of 2-8.
+     * A cohort is only ever split when it alone exceeds {@link #MAX_POD_SIZE},
+     * and then into near-equal parts using the same n/6 rounding the old
+     * chunker used — so same-industry, same-stage members sit together
+     * instead of being sliced at arbitrary cursor positions. A pod is never
+     * closed at a single member (publish refuses pods below 2), even if that
+     * means overshooting the soft cap by one small cohort.
+     *
+     * <p>Deterministic given the same membership: fixed sort, fixed cohort
+     * order, fixed first-fit order — so "publish" without overrides writes
+     * exactly what the preview showed.
      */
     static List<PodDraft> greedyGroup(List<Long> activeMembers,
                                       Map<Long, String> groupKeyByUser) {
@@ -353,33 +374,87 @@ public class PodsService {
         sorted.sort(Comparator
                 .comparing((Long id) -> groupKeyByUser.getOrDefault(id, "general"))
                 .thenComparing(id -> id));
-        int n = sorted.size();
-        if (n < 2) {
-            return List.of(); // the caller refusesPreview earlier for tiny pools
+        if (sorted.size() < 2) {
+            return List.of(); // the caller refuses earlier for tiny pools
         }
-        int podCount = Math.max(1, (int) Math.round(n / 6.0));
-        int base = n / podCount;
-        int remainder = n % podCount;
+
+        // Whole cohorts: maximal runs sharing one group key.
+        List<List<Long>> cohorts = new ArrayList<>();
+        List<Long> run = new ArrayList<>();
+        String runKey = null;
+        for (Long id : sorted) {
+            String key = groupKeyByUser.getOrDefault(id, "general");
+            if (runKey != null && !key.equals(runKey)) {
+                cohorts.add(run);
+                run = new ArrayList<>();
+            }
+            runKey = key;
+            run.add(id);
+        }
+        if (!run.isEmpty()) {
+            cohorts.add(run);
+        }
+
+        // Split only oversized cohorts, into near-equal parts (n/6 rounding).
+        List<List<Long>> pieces = new ArrayList<>();
+        for (List<Long> cohort : cohorts) {
+            if (cohort.size() <= MAX_POD_SIZE) {
+                pieces.add(cohort);
+                continue;
+            }
+            int parts = Math.max(2, (int) Math.round(cohort.size() / 6.0));
+            int base = cohort.size() / parts;
+            int remainder = cohort.size() % parts;
+            int at = 0;
+            for (int p = 0; p < parts; p++) {
+                int size = base + (p < remainder ? 1 : 0);
+                pieces.add(new ArrayList<>(cohort.subList(at, at + size)));
+                at += size;
+            }
+        }
+
+        // First-fit packing of whole pieces, in order.
+        List<List<Long>> pods = new ArrayList<>();
+        List<Long> pod = new ArrayList<>();
+        for (List<Long> piece : pieces) {
+            if (pod.isEmpty() || pod.size() + piece.size() <= MAX_POD_SIZE) {
+                pod.addAll(piece);
+            } else if (pod.size() < 2) {
+                // Never emit a 1-member pod: overshoot the soft cap instead.
+                pod.addAll(piece);
+            } else {
+                pods.add(pod);
+                pod = new ArrayList<>(piece);
+            }
+        }
+        if (!pod.isEmpty()) {
+            if (!pods.isEmpty() && pod.size() < 2) {
+                // Trailing single member joins the previous pod.
+                pods.get(pods.size() - 1).addAll(pod);
+            } else {
+                pods.add(pod);
+            }
+        }
+
         List<PodDraft> drafts = new ArrayList<>();
-        int cursor = 0;
-        for (int i = 0; i < podCount; i++) {
-            int size = base + (i < remainder ? 1 : 0);
-            List<Long> chunk = new ArrayList<>(sorted.subList(cursor, cursor + size));
-            cursor += size;
-            Map<String, Long> counts = chunk.stream()
-                    .map(id -> groupKeyByUser.getOrDefault(id, "general"))
-                    .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
-            // Deterministic label even on exact ties: value desc, then key asc.
-            String top = counts.entrySet().stream()
-                    .max(Comparator.comparing((Map.Entry<String, Long> e) -> e.getValue())
-                            .thenComparing(Map.Entry::getKey))
-                    .map(Map.Entry::getKey)
-                    .orElse("general");
-            boolean mixed = counts.size() > 1;
-            String label = displayLabel(top) + (mixed ? " (mixed)" : "");
-            drafts.add(new PodDraft(label, chunk));
+        for (List<Long> members : pods) {
+            drafts.add(new PodDraft(labelFor(members, groupKeyByUser), members));
         }
         return drafts;
+    }
+
+    /** Dominant group key wins the label; ties break on key asc. */
+    private static String labelFor(List<Long> members,
+                                   Map<Long, String> groupKeyByUser) {
+        Map<String, Long> counts = members.stream()
+                .map(id -> groupKeyByUser.getOrDefault(id, "general"))
+                .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
+        String top = counts.entrySet().stream()
+                .max(Comparator.comparing((Map.Entry<String, Long> e) -> e.getValue())
+                        .thenComparing(Map.Entry::getKey))
+                .map(Map.Entry::getKey)
+                .orElse("general");
+        return displayLabel(top) + (counts.size() > 1 ? " (mixed)" : "");
     }
 
     private List<Long> activeMemberIds(Long ws) {
@@ -403,6 +478,19 @@ public class PodsService {
                 continue; // neither dimension set: keep the "general" default
             }
             map.put(profile.getUserId(), stage == null ? industry : industry + GROUP_SEP + stage);
+        }
+        return map;
+    }
+
+    /** Revenue stage per member (trimmed, blank/absent → null) for composition. */
+    private Map<Long, String> revenueStagesFor(Long ws, List<Long> userIds) {
+        Map<Long, String> map = new TreeMap<>();
+        for (MemberProfile profile : memberProfiles.findByWorkspaceIdAndUserIdIn(ws,
+                userIds)) {
+            String stage = profile.getRevenueStage();
+            if (stage != null && !stage.isBlank()) {
+                map.put(profile.getUserId(), stage.trim());
+            }
         }
         return map;
     }
@@ -479,12 +567,16 @@ public class PodsService {
     }
 
     private PodView toPodView(Pod pod, Map<Long, Integer> streaks) {
-        List<MemberLine> members = podMembers.findByWorkspaceIdAndPodId(
-                pod.getWorkspaceId(), pod.getId()).stream()
+        List<PodMember> rows = podMembers.findByWorkspaceIdAndPodId(
+                pod.getWorkspaceId(), pod.getId());
+        Map<Long, String> stages = revenueStagesFor(pod.getWorkspaceId(),
+                rows.stream().map(PodMember::getUserId).toList());
+        List<MemberLine> members = rows.stream()
                 .map(pm -> new MemberLine(pm.getUserId(),
                         displayName(pm.getUserId()),
                         streaks == null ? Integer.valueOf(0)
-                                : streaks.getOrDefault(pm.getUserId(), 0)))
+                                : streaks.getOrDefault(pm.getUserId(), 0),
+                        stages.get(pm.getUserId())))
                 .toList();
         return new PodView(pod.getId(), pod.getName(), pod.getIndustry(), members);
     }

@@ -69,6 +69,35 @@ class Phase3InvitesPortalTest extends IntegrationTest {
     }
 
     @Test
+    void invalidInviteRoleIsAClientErrorNotAServerError() throws Exception {
+        Account owner = register("inv-role");
+        long ws = createWorkspace(owner, "Invite Role " + sfx, null);
+
+        // Regression: an unknown role string used to escape WorkspaceRole.parse
+        // as IllegalArgumentException and surface as a 500.
+        apiPost(owner, ws, "/api/invites",
+                        "{\"email\":\"bad-role-" + sfx
+                                + "@example.test\",\"role\":\"banana\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.message").value(
+                        "Unknown role 'banana' — expected one of owner, admin, manager, rep"));
+
+        // Blank and null-ish role strings are client errors, not NPEs.
+        apiPost(owner, ws, "/api/invites",
+                        "{\"email\":\"blank-role-" + sfx
+                                + "@example.test\",\"role\":\"   \"}")
+                .andExpect(status().isBadRequest());
+
+        // Normalization is unchanged: trim + case-insensitive still invite.
+        apiPost(owner, ws, "/api/invites",
+                        "{\"email\":\"ok-role-" + sfx
+                                + "@example.test\",\"role\":\" admin \"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("ADMIN"));
+    }
+
+    @Test
     void expiredInviteCannotBeAccepted() throws Exception {
         Account owner = register("inv-exp-owner");
         long ws = createWorkspace(owner, "Invite Exp " + sfx, null);

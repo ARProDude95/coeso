@@ -10,10 +10,13 @@ import com.coeso.roster.repo.Repositories.WorkspaceRepository;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 /**
@@ -68,6 +71,13 @@ public class LeaderboardService {
         return build(workspaceId, period, from, to, metricTypeId);
     }
 
+    /** First day of the quarter containing {@code day} — the longest period
+     *  the leaderboard serves, also used as the match-score performance window. */
+    private static LocalDate quarterStart(LocalDate day) {
+        int startMonth = ((day.getMonthValue() - 1) / 3) * 3 + 1;
+        return day.withMonth(startMonth).withDayOfMonth(1);
+    }
+
     private LeaderboardResponse build(Long workspaceId, String period, String fromRaw,
                                       String toRaw, Long metricTypeId) {
         String normalizedPeriod = period == null || period.isBlank()
@@ -84,10 +94,7 @@ public class LeaderboardService {
                 from = monday;
             }
             case "month" -> from = today.withDayOfMonth(1);
-            case "quarter" -> {
-                int quarterStartMonth = ((today.getMonthValue() - 1) / 3) * 3 + 1;
-                from = today.withMonth(quarterStartMonth).withDayOfMonth(1);
-            }
+            case "quarter" -> from = quarterStart(today);
             case "custom" -> {
                 if (fromRaw == null || fromRaw.isBlank() || toRaw == null || toRaw.isBlank()) {
                     throw new BadRequestException(
@@ -168,5 +175,68 @@ public class LeaderboardService {
         return new LeaderboardResponse(normalizedPeriod, metric.getId(), metric.getName(),
                 metric.getUnit().name().toLowerCase(Locale.ROOT), from, to,
                 canSeeNames || showNamesSetting, selfRank, items);
+    }
+
+    /**
+     * The match score's performance factor, computed from the same activity
+     * rows the leaderboard ranks on: current quarter to date, one value per
+     * metric scaled to the workspace's top scorer on that metric, then
+     * averaged across the metrics that hold data — 0–100 reads as "fraction
+     * of the workspace's best". Reps with no rows in the window are omitted
+     * from the map, so the scorer marks the factor not applicable instead of
+     * inventing a zero; a workspace with no activity returns an empty map and
+     * match scoring behaves exactly as it did before Phase 7 landed.
+     *
+     * <p>No pro-gate here on purpose: writing activity is already [PRO], so a
+     * free workspace simply has no rows and no gated data leaks through. This
+     * is an internal scoring input on a manager+ surface (suggested reps), so
+     * the leaderboard's rep-name masking does not apply.
+     */
+    public Map<Long, Double> performanceIndex(Collection<Long> repIds) {
+        if (repIds == null || repIds.isEmpty()) {
+            return Map.of();
+        }
+        LocalDate today = LocalDate.now();
+        List<Object[]> rows = entityManager
+                .createQuery("select a.metricTypeId, a.repId, sum(a.valueMinor)"
+                        + " from ActivityEntry a"
+                        + " where a.occurredOn >= :from and a.occurredOn <= :to"
+                        + " group by a.metricTypeId, a.repId", Object[].class)
+                .setParameter("from", quarterStart(today))
+                .setParameter("to", today)
+                .getResultList();
+
+        Map<Long, Map<Long, Long>> sums = new HashMap<>();
+        Map<Long, Long> metricBest = new HashMap<>();
+        Set<Long> withData = new HashSet<>();
+        for (Object[] row : rows) {
+            Long metricId = (Long) row[0];
+            Long repId = (Long) row[1];
+            long value = ((Number) row[2]).longValue();
+            sums.computeIfAbsent(metricId, k -> new HashMap<>()).put(repId, value);
+            metricBest.merge(metricId, value, Math::max);
+            withData.add(repId);
+        }
+        List<Long> scoredMetrics = metricBest.entrySet().stream()
+                .filter(e -> e.getValue() > 0)
+                .map(Map.Entry::getKey)
+                .toList();
+        if (scoredMetrics.isEmpty()) {
+            return Map.of(); // rows exist but every value is zero: no signal
+        }
+
+        Map<Long, Double> result = new HashMap<>();
+        for (Long repId : repIds) {
+            if (!withData.contains(repId)) {
+                continue; // no rows in the window → factor not applicable
+            }
+            double fraction = 0;
+            for (Long metricId : scoredMetrics) {
+                long value = sums.get(metricId).getOrDefault(repId, 0L);
+                fraction += 100.0 * value / metricBest.get(metricId);
+            }
+            result.put(repId, fraction / scoredMetrics.size());
+        }
+        return result;
     }
 }

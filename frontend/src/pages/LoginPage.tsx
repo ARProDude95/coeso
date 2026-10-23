@@ -66,6 +66,12 @@ export default function LoginPage() {
       </aside>
       <main className="auth-panel">
         <div className="auth-card">
+          {/* On small screens the brand-story panel is hidden — keep the
+              wordmark so the page still says what product it is. */}
+          <span className="auth-brand" aria-hidden="true">
+            <span className="brand-name">Roster</span>
+            <span className="brand-by">by Coeso</span>
+          </span>
           <h1>Sign in</h1>
           <p className="sub">Welcome back. Pick up where your roster left off.</p>
           <form onSubmit={onSubmit}>
@@ -74,6 +80,7 @@ export default function LoginPage() {
               <input
                 id="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -85,6 +92,7 @@ export default function LoginPage() {
               <input
                 id="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

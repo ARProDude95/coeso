@@ -26,8 +26,15 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  # Behind the production nginx proxy (docker-compose.prod.yml) the backend
+  # must see the client's original scheme/host, otherwise Spring's CORS
+  # processor treats every proxied same-origin POST as cross-origin. Only the
+  # compose proxy sends X-Forwarded-*; elsewhere this is a no-op.
+  forward-headers-strategy: framework
 
 app:
+  # Public origin of the frontend — invite links and checkout return URL.
+  base-url: ${APP_BASE_URL:http://localhost:5173}
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-please-generate-a-real-one-32b}
     ttl-minutes: ${JWT_TTL_MINUTES:720}
@@ -36,6 +43,25 @@ app:
   purge:
     initial-delay-ms: 15000
     interval-ms: 3600000
+  digest:
+    # Weekly digest job: one plain-text digest per active workspace, Mondays
+    # at 08:00 server time; idempotent per ISO week. job-enabled=false keeps
+    # tests off the schedule (they drive DigestService directly).
+    cron: ${DIGEST_CRON:0 0 8 * * MON}
+    job-enabled: ${DIGEST_JOB_ENABLED:true}
+  engagement:
+    # Nightly engagement snapshots + churn dashboard: window-days is the
+    # trailing activity window, inactive-days the INACTIVE signal threshold,
+    # drop-percent + min-previous-score the DROP signal (score fall vs the
+    # previous snapshot, with a noise floor on the baseline). job-enabled=
+    # false keeps tests off the schedule (they drive EngagementService
+    # directly).
+    cron: ${ENGAGEMENT_CRON:0 30 2 * * *}
+    window-days: ${ENGAGEMENT_WINDOW_DAYS:30}
+    inactive-days: ${ENGAGEMENT_INACTIVE_DAYS:14}
+    drop-percent: ${ENGAGEMENT_DROP_PERCENT:50}
+    min-previous-score: ${ENGAGEMENT_MIN_PREVIOUS_SCORE:12}
+    job-enabled: ${ENGAGEMENT_JOB_ENABLED:true}
   discord:
     # OAuth "Login with Discord" (empty = endpoint answers 503).
     client-id: ${DISCORD_CLIENT_ID:}

@@ -36,4 +36,14 @@ public class NoOpDiscordNotifier implements DiscordNotifier {
     public void introAccepted(Long workspaceId, String fromName, String toName) {
         // no bot configured: nothing to do
     }
+
+    @Override
+    public void weeklyDigest(Long workspaceId, String body) {
+        // no bot configured: nothing to do (digest_logs keeps the record)
+    }
+
+    @Override
+    public void engagementNudge(Long workspaceId, String memberName, String reason) {
+        // no bot configured: nothing to do
+    }
 }

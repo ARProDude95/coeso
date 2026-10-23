@@ -1,0 +1,42 @@
+# HTTPS front for docker-compose.prod.yml — adds Caddy as the ONLY public
+# entry point and stops the nginx frontend from publishing a host port.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.caddy.yml up -d --build
+#
+# .env must define APP_DOMAIN (the apex domain bought for this deployment,
+# already pointed at this server via an A record + www CNAME).
+#
+# Requires Docker Compose v2.24+ for the `!override` tag on ports.
+
+services:
+  frontend:
+    # !override REPLACES the base file's "${HTTP_PORT:-80}:80" — without it
+    # compose would append the entry and :80 would collide with Caddy.
+    # Nothing but Caddy answers on the host; this loopback binding is only a
+    # local debug hook (curl http://127.0.0.1:8081/ on the server itself).
+    ports: !override
+      - "127.0.0.1:8081:80"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      # Apex domain; the Caddyfile also serves www.<domain>.
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN in .env (e.g. APP_DOMAIN=example.com)}
+    ports:
+      # 80 for the ACME HTTP challenge + redirects, 443 for TLS. Fixed on
+      # purpose: Let's Encrypt validation expects these standard ports.
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data      # certificates, ACME account key, renewals
+      - caddy-config:/config  # Caddy internal state
+    depends_on:
+      frontend:
+        condition: service_healthy
+    networks: [roster]
+
+volumes:
+  caddy-data:
+  caddy-config:

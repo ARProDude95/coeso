@@ -17,23 +17,32 @@
   --text-dim: #ab9d88;
   --text-faint: #7a6d5a;
 
-  /* brand */
+  /* brand — --accent is the single white-label knob (Layout sets it from
+     workspace branding); every other accent surface is DERIVED from it with
+     color-mix(), so re-knitting one color restyles primary buttons, active
+     nav, rings, soft fills and glows together. Before this, --accent-strong,
+     -soft, -line, -ink were hard-coded gold: a branded workspace got a blue
+     accent button with gold hover rings. */
   --accent: #d2a95f;
-  --accent-strong: #e7c580;
-  --accent-soft: rgba(210, 169, 95, 0.14);
-  --accent-line: rgba(210, 169, 95, 0.32);
-  --accent-ink: #191207;
+  --accent-strong: color-mix(in oklab, var(--accent), white 26%);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 32%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 62%, transparent);
+  --accent-ink: color-mix(in oklab, var(--accent) 10%, black);
 
   /* status */
   --danger: #e08078;
-  --danger-soft: rgba(224, 128, 120, 0.13);
+  --danger-soft: color-mix(in srgb, var(--danger) 13%, transparent);
+  --danger-line: color-mix(in srgb, var(--danger) 40%, transparent);
   --success: #97c981;
-  --success-soft: rgba(151, 201, 129, 0.13);
+  --success-soft: color-mix(in srgb, var(--success) 13%, transparent);
+  --success-line: color-mix(in srgb, var(--success) 40%, transparent);
   --info: #86b3d4;
-  --info-soft: rgba(134, 179, 212, 0.13);
+  --info-soft: color-mix(in srgb, var(--info) 13%, transparent);
+  --info-line: color-mix(in srgb, var(--info) 40%, transparent);
 
-  --pill-bench: #d2a95f;
-  --pill-training: #86b3d4;
+  --pill-bench: var(--accent);
+  --pill-training: var(--info);
   --pill-inactive: #98907f;
 
   /* shape + elevation */
@@ -43,7 +52,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.7);
-  --ring: 0 0 0 3px rgba(210, 169, 95, 0.25);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 
   /* motion */
   --ease: cubic-bezier(0.33, 1, 0.68, 1);
@@ -67,7 +76,7 @@ body {
   background-color: var(--bg);
   /* ambient warmth: a soft gold pool top-right, a cooler shadow bottom-left */
   background-image:
-    radial-gradient(900px 520px at 88% -12%, rgba(210, 169, 95, 0.10), transparent 62%),
+    radial-gradient(900px 520px at 88% -12%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%),
     radial-gradient(700px 480px at -8% 108%, rgba(120, 96, 64, 0.09), transparent 60%);
   background-attachment: fixed;
   color: var(--text);
@@ -98,6 +107,7 @@ h1, h2, h3, h4 {
   line-height: 1.2;
   margin: 0 0 0.5rem;
   color: var(--text);
+  text-wrap: balance;
 }
 
 h1 { font-size: clamp(1.5rem, 1.2rem + 1vw, 1.95rem); }
@@ -106,6 +116,14 @@ h3 { font-size: 1.05rem; }
 h4 { font-size: 0.95rem; }
 
 p { margin: 0 0 0.75rem; }
+
+/* prose links need an affordance beyond colour (a11y) */
+p a:not(.btn) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--accent-line);
+}
+p a:not(.btn):hover { text-decoration-color: var(--accent); }
 
 a { color: var(--accent); text-decoration: none; transition: color var(--speed) var(--ease); }
 a:hover { color: var(--accent-strong); }
@@ -155,6 +173,18 @@ select {
   cursor: pointer;
 }
 
+select option { background: var(--bg-raised); color: var(--text); }
+
+/* Chrome paints autofilled fields with a light background — a white box
+   inside the dark login/register forms. Force our own surface + text. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px #0d0a08 inset;
+  caret-color: var(--text);
+}
+
 label {
   display: block;
   font-size: 0.78rem;
@@ -195,13 +225,13 @@ label {
   border-color: var(--accent);
   color: var(--accent-ink);
   font-weight: 650;
-  box-shadow: 0 6px 16px -8px rgba(210, 169, 95, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  box-shadow: 0 6px 16px -8px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .btn-primary:hover {
   background: linear-gradient(180deg, #f0d196, var(--accent-strong));
   border-color: var(--accent-strong);
-  box-shadow: 0 10px 22px -10px rgba(210, 169, 95, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 10px 22px -10px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .btn-danger { color: var(--danger); border-color: var(--border-strong); }
@@ -248,17 +278,31 @@ label {
   white-space: nowrap;
 }
 
-.pill-bench { color: var(--pill-bench); border-color: rgba(210, 169, 95, 0.4); background: var(--accent-soft); }
-.pill-training { color: var(--pill-training); border-color: rgba(134, 179, 212, 0.4); background: var(--info-soft); }
+.pill-bench, .pill-filled, .pill-gold, .pill-bench-now { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.pill-training { color: var(--pill-training); border-color: var(--info-line); background: var(--info-soft); }
 .pill-inactive { color: var(--pill-inactive); border-color: var(--border-strong); background: rgba(152, 144, 127, 0.12); }
-.pill-open { color: var(--success); border-color: rgba(151, 201, 129, 0.4); background: var(--success-soft); }
-.pill-filled { color: var(--accent); border-color: rgba(210, 169, 95, 0.4); background: var(--accent-soft); }
+.pill-open, .pill-placed { color: var(--success); border-color: var(--success-line); background: var(--success-soft); }
 .pill-closed { color: var(--text-faint); border-color: var(--border-strong); background: transparent; }
-.pill-placed { color: var(--success); border-color: rgba(151, 201, 129, 0.4); background: var(--success-soft); }
-.pill-gold { color: var(--accent); border-color: rgba(210, 169, 95, 0.4); background: var(--accent-soft); }
-.pill-bench-now { color: var(--accent); border-color: rgba(210, 169, 95, 0.4); background: var(--accent-soft); }
-.pill-danger { color: var(--danger); border-color: rgba(224, 128, 120, 0.4); background: var(--danger-soft); }
+.pill-danger { color: var(--danger); border-color: var(--danger-line); background: var(--danger-soft); }
 .pill-muted { color: var(--text-dim); border-color: var(--border-strong); background: rgba(0, 0, 0, 0.2); }
+
+/* revenue-stage mix under each pod (pods are balanced by industry + stage) */
+.stage-composition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.15rem 0 0.5rem;
+}
+
+.stage-composition-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--text-faint);
+  margin-right: 0.15rem;
+}
 
 /* header right-side button group (page actions) */
 .header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
@@ -287,7 +331,7 @@ label {
   -webkit-backdrop-filter: saturate(150%) blur(12px);
 }
 
-.brand { display: inline-flex; align-items: center; gap: 0.6rem; margin-right: 0.35rem; }
+.brand { display: inline-flex; align-items: center; gap: 0.6rem; margin-right: 0.35rem; flex-shrink: 0; }
 
 /* wordmark lockup ("Roster" with the by-Coeso tag) */
 
@@ -325,6 +369,24 @@ label {
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 999px;
+  /* The 11-item pill row is wider than a laptop header: it shrinks and
+     scrolls INSIDE its pill instead of stretching the topnav past the
+     viewport (which pushed the workspace switcher and account menu
+     off-screen at 1024–1400px). Layout toggles .nav-scrollable via
+     ResizeObserver so the edge fades only appear when it actually scrolls. */
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.mainnav::-webkit-scrollbar { display: none; }
+
+.mainnav.nav-scrollable {
+  mask-image: linear-gradient(to right, transparent 0, #000 14px,
+    #000 calc(100% - 14px), transparent 100%);
 }
 
 .mainnav a {
@@ -348,13 +410,13 @@ label {
 .mainnav a.active {
   color: var(--accent-ink);
   background: linear-gradient(150deg, var(--accent-strong), var(--accent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 4px 12px -7px rgba(210, 169, 95, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 4px 12px -7px var(--accent-glow);
 }
 
 .mainnav a.active svg { opacity: 1; }
 
 /* right cluster: workspace switcher · shortcut · account menu */
-.topnav .nav-end { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
+.topnav .nav-end { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; flex-shrink: 0; }
 
 .nav-divider { width: 1px; height: 24px; background: var(--border); margin: 0 0.1rem; }
 
@@ -609,6 +671,7 @@ label {
 .chip {
   display: inline-flex;
   align-items: center;
+  cursor: pointer;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border-strong);
   border-radius: 999px;
@@ -675,7 +738,7 @@ label {
   transition: width 260ms var(--ease);
 }
 
-.progress-fill.full { background: linear-gradient(90deg, var(--danger), #eaa099); }
+.progress-fill.full { background: linear-gradient(90deg, var(--danger), color-mix(in oklab, var(--danger), white 22%)); }
 
 .seat-label { font-size: 0.8rem; color: var(--text-dim); }
 
@@ -728,6 +791,8 @@ label {
   padding: 1.4rem 1.5rem 1.5rem;
   width: 100%;
   max-width: 500px;
+  max-height: 88vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   animation: slide-up 180ms var(--ease);
 }
@@ -768,7 +833,7 @@ label {
   margin: 0.6rem 0;
   padding: 0.55rem 0.75rem;
   background: var(--danger-soft);
-  border: 1px solid rgba(224, 128, 120, 0.3);
+  border: 1px solid var(--danger-line);
   border-radius: var(--radius-sm);
 }
 
@@ -852,7 +917,7 @@ label {
   padding: 3rem;
   border-right: 1px solid var(--border);
   background:
-    radial-gradient(600px 420px at 20% 10%, rgba(210, 169, 95, 0.16), transparent 60%),
+    radial-gradient(600px 420px at 20% 10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
     linear-gradient(160deg, var(--bg-overlay), var(--bg));
 }
 
@@ -881,7 +946,9 @@ label {
 .auth-points { list-style: none; margin: 1.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
 .auth-points li { display: flex; gap: 0.6rem; align-items: flex-start; color: var(--text-dim); font-size: 0.92rem; }
 .auth-points li::before {
-  content: '';
+  content: '✓';
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
   width: 18px;
   height: 18px;
@@ -889,7 +956,10 @@ label {
   border-radius: 6px;
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
-  box-shadow: inset 0 0 0 2px transparent;
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .auth-aside .aside-foot { color: var(--text-faint); font-size: 0.8rem; }
@@ -903,6 +973,13 @@ label {
 }
 
 .auth-card { background: transparent; border: none; padding: 0; width: 100%; max-width: 380px; box-shadow: none; }
+
+.auth-brand { display: none; align-items: baseline; gap: 0.45rem; margin-bottom: 1.25rem; }
+
+/* the brand story panel is hidden on small screens — keep the wordmark */
+@media (max-width: 900px) {
+  .auth-brand { display: inline-flex; }
+}
 
 .auth-card h1 { color: var(--text); text-align: left; margin-bottom: 0.35rem; }
 .auth-card .sub { text-align: left; color: var(--text-dim); margin-bottom: 1.6rem; font-size: 0.95rem; }
@@ -966,11 +1043,17 @@ label {
 
 /* ---------------------------------------------------------------- billing */
 
-.plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; }
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; align-items: stretch; }
 
 .plan-card { display: flex; flex-direction: column; gap: 0.6rem; position: relative; }
 .plan-card h2 { margin: 0; font-size: 1.2rem; }
 .plan-card.plan-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-line), var(--shadow); }
+
+.plan-card .plan-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.plan-card .plan-blurb { color: var(--text-dim); font-size: 0.86rem; margin: 0; }
+.plan-current-note { font-size: 0.8rem; color: var(--accent); font-weight: 600; }
+
+.pricing-note { margin-top: -0.75rem; margin-bottom: 1.6rem; }
 
 .plan-limits {
   list-style: none;
@@ -984,7 +1067,7 @@ label {
 }
 
 .plan-limits strong { color: var(--text); font-size: 1.05rem; font-family: var(--font-display); }
-.plan-actions { margin-top: auto; padding-top: 0.8rem; display: flex; gap: 0.4rem; }
+.plan-actions { margin-top: auto; padding-top: 0.9rem; display: flex; align-items: center; gap: 0.4rem; border-top: 1px solid var(--border); }
 
 .billing-status { display: flex; gap: 1.75rem; flex-wrap: wrap; margin-bottom: 1.25rem; font-size: 0.92rem; }
 .billing-status dt { color: var(--text-dim); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
@@ -1040,9 +1123,9 @@ label {
   color: var(--text-dim);
 }
 
-.sugg-score.high { color: var(--success); border-color: rgba(151, 201, 129, 0.5); background: var(--success-soft); }
-.sugg-score.mid { color: var(--accent); border-color: rgba(210, 169, 95, 0.5); background: var(--accent-soft); }
-.sugg-score.low { color: var(--danger); border-color: rgba(224, 128, 120, 0.45); background: var(--danger-soft); }
+.sugg-score.high { color: var(--success); border-color: var(--success-line); background: var(--success-soft); }
+.sugg-score.mid { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.sugg-score.low { color: var(--danger); border-color: var(--danger-line); background: var(--danger-soft); }
 
 .sugg-who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .sugg-who strong { font-size: 0.92rem; }
@@ -1100,6 +1183,149 @@ label {
 .page > *:nth-child(3) { animation-delay: 80ms; }
 .page > *:nth-child(4) { animation-delay: 120ms; }
 
+/* ------------------------------------------------------ pipeline board (P8) */
+
+/* Visually hidden, still read by assistive tech (labels, live region). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.board-grid {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  align-items: flex-start;
+  padding-bottom: 12px;
+}
+
+.board-col {
+  flex: 0 0 285px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  min-height: 160px;
+  transition: border-color var(--speed) var(--ease),
+    background-color var(--speed) var(--ease);
+}
+
+.board-col.drag-over {
+  border-color: var(--accent-line);
+  background: var(--bg-hover);
+}
+
+.board-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.board-col-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.board-count {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  white-space: nowrap;
+}
+
+.board-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.board-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: grab;
+}
+
+.board-card:hover { border-color: var(--border-strong); }
+.board-card:active { cursor: grabbing; }
+
+.board-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.board-card-top h3 { margin: 0; font-size: 0.96rem; line-height: 1.3; }
+.board-client { font-size: 0.84rem; }
+
+.board-move { display: flex; flex-direction: column; gap: 3px; }
+
+.board-move select {
+  width: 100%;
+  background: var(--bg-raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.board-move select:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.board-empty { color: var(--text-faint); font-size: 0.85rem; margin: 4px 0 0; }
+
+.stage-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.stage-manager form { display: flex; gap: 8px; }
+.stage-manager form input { flex: 1; }
+
+.stage-manager-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stage-manager-list li { display: flex; align-items: center; gap: 8px; }
+.stage-manager-list li .stage-name { flex: 1; font-weight: 500; }
+.stage-manager-list li input { flex: 1; }
+.stage-manager-count { font-size: 0.8rem; }
+.stage-manager .error-text { margin: 0; }
+
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 900px) {
@@ -1120,6 +1346,17 @@ label {
   .stats-row { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 }
 
+/* Focus rings drawn with OUTLINE: .btn/.btn-primary declare box-shadows
+   after the global :focus-visible rule, so a shadow-based ring on buttons
+   was always overridden — outline can't be clobbered by box-shadow. */
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* honour reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1128,4 +1365,6 @@ label {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+
+  .mainnav { scroll-behavior: auto; }
 }

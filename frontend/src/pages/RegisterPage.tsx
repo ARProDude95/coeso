@@ -48,6 +48,11 @@ export default function RegisterPage() {
       </aside>
       <main className="auth-panel">
         <div className="auth-card">
+          {/* Shown only when the brand-story panel is hidden (< 900px). */}
+          <span className="auth-brand" aria-hidden="true">
+            <span className="brand-name">Roster</span>
+            <span className="brand-by">by Coeso</span>
+          </span>
           <h1>Create account</h1>
           <p className="sub">Then create or join a workspace</p>
           <form onSubmit={onSubmit}>
@@ -55,6 +60,7 @@ export default function RegisterPage() {
               <label htmlFor="displayName">Name</label>
               <input
                 id="displayName"
+                autoComplete="name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 required
@@ -66,6 +72,7 @@ export default function RegisterPage() {
               <input
                 id="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -76,6 +83,7 @@ export default function RegisterPage() {
               <input
                 id="password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 minLength={8}

@@ -54,5 +54,9 @@ public final class PodsRepos {
 
         java.util.List<PodMessage> findByWorkspaceIdAndPodIdOrderByCreatedAtAscIdAsc(
                 @Param("workspaceId") Long workspaceId, Long podId);
+
+        /** Workspace-wide rows — the engagement window's message counts. */
+        java.util.List<PodMessage> findByWorkspaceId(
+                @Param("workspaceId") Long workspaceId);
     }
 }

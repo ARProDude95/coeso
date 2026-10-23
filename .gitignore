@@ -30,3 +30,5 @@ roster-export.csv
 # Freebuff workspace metadata (not project source)
 .freebuff/
 /project-id
+/freebuff-sites-build/
+/sites-deploy/

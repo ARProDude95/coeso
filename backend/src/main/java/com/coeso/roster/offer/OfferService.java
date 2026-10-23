@@ -9,6 +9,7 @@ import com.coeso.roster.entity.Client;
 import com.coeso.roster.entity.Offer;
 import com.coeso.roster.entity.OfferRequiredSkill;
 import com.coeso.roster.entity.OfferStatus;
+import com.coeso.roster.entity.PipelineStage;
 import com.coeso.roster.entity.PlacementStatus;
 import com.coeso.roster.entity.Vertical;
 import com.coeso.roster.lookup.SkillTagService;
@@ -31,7 +32,8 @@ import org.springframework.stereotype.Service;
 /**
  * Offer CRUD. The stored status is only open/closed; the effective status
  * (OPEN / FILLED / CLOSED) is derived from active placements vs seats at query
- * time and never persisted.
+ * time and never persisted. The pipeline stage (Phase 8) is stored, and is the
+ * column the kanban board groups offers by.
  */
 @Service
 public class OfferService {
@@ -80,7 +82,10 @@ public class OfferService {
             Integer tzWindowStart,
             Integer tzWindowEnd,
             LocalDate startDate,
-            List<String> requiredSkills) {
+            List<String> requiredSkills,
+            // ------------------------------------------------ Phase 8 pipeline
+            Long stageId,
+            String stageName) {
     }
 
     private static final Logger log = LoggerFactory.getLogger(OfferService.class);
@@ -89,6 +94,10 @@ public class OfferService {
     private final AuditService auditService;
     private final DiscordNotifier discordNotifier;
     private final SkillTagService skillTags;
+
+    /** The body of POST /api/offers/{id}/stage — move between board columns. */
+    public record StageMoveRequest(@NotNull Long stageId) {
+    }
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -146,6 +155,7 @@ public class OfferService {
                 .createQuery("select o from Offer o"
                         + " left join fetch o.client"
                         + " left join fetch o.vertical"
+                        + " left join fetch o.stage"
                         + where + " order by o.id desc", Offer.class);
         params.forEach(query::setParameter);
         List<Offer> offers = query.getResultList();
@@ -160,6 +170,8 @@ public class OfferService {
         offer.setWorkspaceId(workspaceId);
         offer.setStatus(OfferStatus.OPEN);
         apply(offer, request);
+        // Every offer starts its life in the pipeline's first column.
+        offer.setStage(firstStage(workspaceId));
         entityManager.persist(offer);
         entityManager.flush();
         // Required-skill rows need the generated offer id.
@@ -200,6 +212,37 @@ public class OfferService {
                     Map.of("title", offer.getTitle(), "status", "CLOSED"));
         }
         return assemble(List.of(offer)).get(0);
+    }
+
+    /**
+     * Moves an offer to another pipeline column — the board's drag-and-drop and
+     * its keyboard-accessible move control both land here. The target stage
+     * must belong to this workspace; moving within the same column is a no-op.
+     */
+    @PreAuthorize("@roles.hasAtLeast('MANAGER')")
+    public OfferResponse moveStage(Long id, StageMoveRequest request) {
+        TenantContext.requireWorkspaceId();
+        Offer offer = scoped.require(Offer.class, id, "Offer");
+        PipelineStage target = scoped.require(PipelineStage.class, request.stageId(), "Stage");
+        if (!target.getId().equals(offer.getStageId())) {
+            String from = offer.getStage() == null ? "" : offer.getStage().getName();
+            offer.setStage(target);
+            entityManager.flush();
+            auditService.record(AuditLog.ACTION_UPDATE, "offer", offer.getId(),
+                    Map.of("field", "stage", "from", from, "to", target.getName()));
+        }
+        return assemble(List.of(offer)).get(0);
+    }
+
+    /** The pipeline's first column — where newly created offers land. */
+    private PipelineStage firstStage(Long workspaceId) {
+        return entityManager
+                .createQuery("select s from PipelineStage s"
+                        + " where s.workspaceId = :workspaceId"
+                        + " order by s.position asc, s.id asc", PipelineStage.class)
+                .setParameter("workspaceId", workspaceId)
+                .setMaxResults(1)
+                .getResultStream().findFirst().orElse(null);
     }
 
     private void apply(Offer offer, OfferRequest request) {
@@ -328,7 +371,9 @@ public class OfferService {
                     offer.getTzWindowStart(),
                     offer.getTzWindowEnd(),
                     offer.getStartDate(),
-                    requiredSkills.getOrDefault(offer.getId(), List.of())));
+                    requiredSkills.getOrDefault(offer.getId(), List.of()),
+                    offer.getStageId(),
+                    offer.getStage() == null ? null : offer.getStage().getName()));
         }
         return responses;
     }

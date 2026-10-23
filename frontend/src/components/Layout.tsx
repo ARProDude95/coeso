@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchBranding, listWorkspaces, WorkspaceSummary } from '../api';
@@ -33,6 +33,17 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
       <>
         <rect x="2" y="7" width="20" height="14" rx="2" />
         <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+      </>
+    ),
+  },
+  {
+    to: '/board',
+    label: 'Board',
+    icon: (
+      <>
+        <rect x="3" y="4" width="5" height="16" rx="1.5" />
+        <rect x="9.5" y="4" width="5" height="11" rx="1.5" />
+        <rect x="16" y="4" width="5" height="7" rx="1.5" />
       </>
     ),
   },
@@ -89,6 +100,15 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
         <circle cx="7" cy="8" r="3" />
         <circle cx="17" cy="8" r="3" />
         <circle cx="12" cy="17" r="3" />
+      </>
+    ),
+  },
+  {
+    to: '/engagement',
+    label: 'Engagement',
+    icon: (
+      <>
+        <path d="M3 12h4l2.5-6 3 12 2.5-6H21" />
       </>
     ),
   },
@@ -202,6 +222,31 @@ export default function Layout() {
     }
   }, [branding?.accentColor]);
 
+  // Pill nav: with 11 items the row scrolls inside itself (see .mainnav) —
+  // flag when it actually overflows so the edge fades only show then, and
+  // keep the active pill in view after each navigation.
+  const navRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return undefined;
+    const sync = () =>
+      nav.classList.toggle('nav-scrollable', nav.scrollWidth > nav.clientWidth + 2);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(nav);
+    window.addEventListener('resize', sync);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', sync);
+    };
+  }, []);
+  useEffect(() => {
+    navRef.current
+      ?.querySelector('a.active')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [pathname]);
+
   // The account menu is a plain <details>; close it on outside click / Escape.
   const menuRef = useRef<HTMLDetailsElement>(null);
   function closeMenu() {
@@ -255,7 +300,7 @@ export default function Layout() {
           )}
         </span>
 
-        <nav className="mainnav" aria-label="Main navigation">
+        <nav className="mainnav" aria-label="Main navigation" ref={navRef}>
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.to} to={item.to}>
               <Icon>{item.icon}</Icon>

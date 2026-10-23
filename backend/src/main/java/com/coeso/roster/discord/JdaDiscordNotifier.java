@@ -62,6 +62,19 @@ public class JdaDiscordNotifier implements DiscordNotifier {
                 + fromName + "*");
     }
 
+    @Override
+    public void weeklyDigest(Long workspaceId, String body) {
+        // Self-describing plain text ("Weekly digest — …"), already stored in
+        // digest_logs — Discord is the delivery channel, not the record.
+        send(workspaceId, body);
+    }
+
+    @Override
+    public void engagementNudge(Long workspaceId, String memberName, String reason) {
+        send(workspaceId, "💛 Gentle nudge for **" + memberName + "** — " + reason
+                + ". A friendly ping might help them re-engage");
+    }
+
     private void send(Long workspaceId, String message) {
         try {
             JDA instance = jda();

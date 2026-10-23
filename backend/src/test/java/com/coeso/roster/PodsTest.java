@@ -8,13 +8,18 @@ import com.coeso.roster.common.WorkspaceRole;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
  * Mastermind pods:
- *  - deterministic industry-adjacent preview, published as-is or with manual
- *    overrides (previous generation archived),
+ *  - deterministic industry- then revenue-stage-adjacent preview, published
+ *    as-is or with manual overrides (previous generation archived),
+ *  - stage-cohort balance: same industry + stage members stay in one pod
+ *    (split only when a cohort alone exceeds a pod), sizes 2-8, preview
+ *    deterministic across calls,
  *  - weekly check-ins: members only, one per ISO week (normalized), wins /
  *    blockers required, streaks count consecutive Mondays,
  *  - role gates: generation/publish are admin+; members read only their pods,
@@ -247,6 +252,76 @@ class PodsTest extends IntegrationTest {
         var published = read(apiPost(owner, ws, "/api/pods/publish", "{}").andReturn());
         assertThat(published.get(0).get("name").asText()).isNotNull();
         assertThat(published.toString()).contains("Fintech · Growth").contains("Fintech · Seed");
+    }
+
+    @Test
+    void previewBalancesRevenueStageCohortsAndStaysDeterministic() throws Exception {
+        Account owner = register("pd-bal");
+        long ws = createWorkspace(owner, "Pods Balance " + sfx, null);
+        apiPut(owner, ws, "/api/intros/profile",
+                "{\"industry\":\"Fintech\",\"revenueStage\":\"Growth\","
+                        + "\"offeringTags\":[\"lead\"]}")
+                .andExpect(status().isOk());
+        // 10 Growth (incl. the owner) + 7 Seed, one industry. Blind near-equal
+        // chunking would cut the sorted run at cursor positions (6/6/5 → a
+        // pod with 4 Growth + 2 Seed); stage-cohort packing must keep every
+        // Growth member together with Growth peers and every Seed with Seed.
+        List<Long> growth = new ArrayList<>();
+        List<Long> seed = new ArrayList<>();
+        growth.add(owner.userId());
+        for (int i = 0; i < 9; i++) {
+            Account m = register("pd-bal-g" + i);
+            addMember(ws, m.userId(), WorkspaceRole.MANAGER);
+            apiPut(m, ws, "/api/intros/profile",
+                    "{\"industry\":\"Fintech\",\"revenueStage\":\"Growth\","
+                            + "\"offeringTags\":[\"g" + i + "\"]}")
+                    .andExpect(status().isOk());
+            growth.add(m.userId());
+        }
+        for (int i = 0; i < 7; i++) {
+            Account m = register("pd-bal-s" + i);
+            addMember(ws, m.userId(), WorkspaceRole.MANAGER);
+            apiPut(m, ws, "/api/intros/profile",
+                    "{\"industry\":\"Fintech\",\"revenueStage\":\"Seed\","
+                            + "\"offeringTags\":[\"s" + i + "\"]}")
+                    .andExpect(status().isOk());
+            seed.add(m.userId());
+        }
+
+        // Deterministic: two consecutive previews are identical, and every
+        // pod is stage-pure, size-balanced, and covers everyone exactly once.
+        var preview = read(apiPost(owner, ws, "/api/pods/generate", null).andReturn());
+        var again = read(apiPost(owner, ws, "/api/pods/generate", null).andReturn());
+        assertThat(again.toString()).isEqualTo(preview.toString());
+        int seenGrowth = 0;
+        int seenSeed = 0;
+        for (var draft : preview) {
+            String label = draft.get("industry").asText();
+            assertThat(label).isIn("Fintech · Growth", "Fintech · Seed");
+            assertThat(draft.get("userIds").size()).isBetween(2, 8);
+            List<Long> ids = new ArrayList<>();
+            draft.get("userIds").forEach(id -> ids.add(id.asLong()));
+            if (label.equals("Fintech · Growth")) {
+                assertThat(ids).allMatch(growth::contains);
+                seenGrowth += ids.size();
+            } else {
+                assertThat(ids).allMatch(seed::contains);
+                seenSeed += ids.size();
+            }
+        }
+        assertThat(seenGrowth).isEqualTo(growth.size());
+        assertThat(seenSeed).isEqualTo(seed.size());
+
+        // Publishing with no overrides writes exactly the previewed partition.
+        var published = read(apiPost(owner, ws, "/api/pods/publish", "{}").andReturn());
+        assertThat(published.size()).isEqualTo(preview.size());
+        for (int i = 0; i < published.size(); i++) {
+            List<Long> pubIds = new ArrayList<>();
+            published.get(i).get("members").forEach(m -> pubIds.add(m.get("userId").asLong()));
+            List<Long> draftIds = new ArrayList<>();
+            preview.get(i).get("userIds").forEach(id -> draftIds.add(id.asLong()));
+            assertThat(pubIds).containsExactlyInAnyOrderElementsOf(draftIds);
+        }
     }
 
     @Test

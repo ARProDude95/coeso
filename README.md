@@ -6,10 +6,11 @@ agency/community; every decision in the schema and the code assumes many
 isolated tenants. The first tenant is Cooeso (workspace #1); the product is
 sold to other communities afterwards.
 
-**Status:** phases 1–7 are implemented — backend foundation (1),
+**Status:** phases 1–8 are implemented — backend foundation (1),
 frontend (2), invites / CSV import / rep portal (3), billing (4), Discord
 integration + reports + white-label (5), skills, profiles & smart matching (6),
-and performance, commissions & payouts [PRO] (7). See "What was built per
+performance, commissions & payouts [PRO] (7), and the offer pipeline with its
+accessible kanban board (8). See "What was built per
 phase" below.
 
 ## Stack
@@ -34,7 +35,7 @@ backend/            Spring Boot application (Maven)
     discord/        OAuth login, role sync, JDA notifier, guild settings
     entity/         JPA entities + tenant base classes
     invite -> workspace/  invites (create/list/revoke/preview/accept)
-    lookup/ offer/ placement/ plan/ purge/ rep/ reports/ stats/
+    lookup/ offer/ pipeline/ placement/ plan/ purge/ rep/ reports/ stats/
     match/          pure match scorer + "suggested reps" service (Phase 6)
     performance/    activity log, earnings ledger, payouts, commission rules,
                     leaderboard (Phase 7, all [PRO])
@@ -43,14 +44,18 @@ backend/            Spring Boot application (Maven)
     audit/          audit_log writer + /api/audit activity feed
   src/main/resources/db/migration/   Flyway migrations (V1 schema, V2 plans,
                                      V3 discord login, V4 skills & profiles,
-                                     V5 performance & commissions)
+                                     V5 performance & commissions,
+                                     V6 offer pipeline)
   src/test/                         integration test suites
 frontend/           React + TypeScript + Vite app
-  src/pages/        login/register, workspace picker, roster, offers, reports,
-                    performance (Phase 7), settings (lookups, billing,
-                    branding, discord, metrics)
+  src/pages/        login/register, workspace picker, roster, offers, board
+                    (Phase 8 kanban), reports, performance (Phase 7), settings
+                    (lookups, billing, branding, discord, metrics)
   src/test/         vitest suites
 start-dev.sh        one-command stack: MySQL + backend + frontend + tunnel
+smoke-test.sh       end-to-end smoke test against that running stack
+smoke-community.sh  community smoke: profile, invites, pod generation, threads
+seed-demo.sh        seeds a review-ready demo workspace (reps/offers/placements)
 docker-compose.yml  MySQL 8 for local development
 .env.example        all environment variables, documented
 ```
@@ -85,18 +90,43 @@ Billing and Discord features need keys — see `.env.example`; everything works
 without them (checkout and Discord login answer 503 with a clear code until
 configured, webhooks are rejected, notifications are dropped).
 
+## Demo data
+
+`./seed-demo.sh` fills a **Demo Agency** workspace with a review-ready,
+realistic dataset: 10 reps with full Phase 6 profiles (the free plan's rep
+cap — 5 placed, 5 benching), 5 clients, 8 offers distributed 2-per-column
+across the pipeline board, and 5 active placements (Enterprise AE filled
+2/2, the rest partial). It drives the running stack through the frontend
+origin — the same path a browser uses — and prints the login to review with:
+
+```bash
+./seed-demo.sh         # login: demo@example.test / password123 · Board at /board
+```
+
+Re-runs are safe: a populated board is skipped untouched. To reseed from
+scratch use a fresh name (`DEMO_WORKSPACE_NAME='Demo Agency 2'`) — a
+deleted workspace keeps its slug, so the old name can never be recreated.
+Overrides: `FRONTEND_URL`, `DEMO_EMAIL`, `DEMO_PASSWORD`,
+`DEMO_WORKSPACE_NAME`.
+
 ## Running the tests
 
 ```bash
 # backend
 cd backend
-mvn test                            # full suite (118 tests)
+mvn test                            # full suite (131 tests)
 mvn test -Dtest=Phase7PerformanceTest        # one class
 
 # frontend
 cd frontend
-npm test                            # vitest (44 tests)
+npm test                            # vitest (46 tests)
 npx tsc --noEmit                    # typecheck
+
+# end-to-end smoke tests against the LIVE dev stack (run start-dev.sh first);
+# exit non-zero on any failed step. BACKEND_URL / FRONTEND_URL override
+# the localhost defaults.
+./smoke-test.sh                     # or: bash smoke-test.sh
+./smoke-community.sh                # community features (see below)
 ```
 
 - With Docker available, backend tests use **Testcontainers MySQL 8** (fresh
@@ -104,6 +134,102 @@ npx tsc --noEmit                    # typecheck
 - Without Docker they fall back to the external MySQL given by
   `ROSTER_TEST_DB_URL` (same engine; the schema is wiped and re-migrated when
   migrations change).
+- `smoke-test.sh` is different: it drives the **running dev stack** over HTTP
+  through the frontend origin (so the Vite `/api` proxy is part of the path) —
+  static serving → register → workspace + default seed → client/offer →
+  pipeline board → cross-column move → 401/403 negatives → workspace cleanup.
+  It needs no Docker, only `./start-dev.sh` already up.
+- `smoke-community.sh` covers the community features the same way: intros
+  profile (industry + revenue stage + tags) → invite lifecycle (create, list,
+  accept as a second registered user, single-use token → 409) → deterministic
+  pod generation (generate twice, previews must match, publish) → private pod
+  thread (post, read as a member, blank body → 400, outsider → 403) →
+  workspace cleanup. Repeatable back-to-back: every run uses fresh
+  timestamped emails, so runs never collide; it drives the frontend origin
+  when `:5173` is up and falls back to the backend directly otherwise.
+
+## Production deployment (Docker)
+
+`docker-compose.prod.yml` runs the whole stack behind a single published
+port:
+
+```bash
+cp .env.example .env
+# required: JWT_SECRET (openssl rand -base64 48), DB_PASSWORD,
+#           MYSQL_ROOT_PASSWORD
+# set once you have a domain: APP_BASE_URL=https://<your-domain>
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+- **Images:** `backend/Dockerfile` — Maven (Java 21) build stage, JRE-only
+  runtime, container healthcheck on `/actuator/health`; tests are skipped in
+  the image (they need Docker/Testcontainers — run them in CI).
+  `frontend/Dockerfile` — Vite production build served by nginx
+  (`frontend/nginx.conf`).
+- **Single origin:** nginx serves the SPA (hashed `/assets` cached
+  immutably, deep links fall back to `index.html`) and reverse-proxies `/api`
+  to the backend container, so the browser only ever talks to one origin and
+  CORS never enters the picture. The backend honours the proxy's
+  `X-Forwarded-*` headers (`server.forward-headers-strategy: framework`) so
+  same-origin checks see the client's real scheme and host.
+- **Isolation & lifecycle:** only `frontend` publishes a port (`HTTP_PORT`,
+  default 80); backend and MySQL sit on the internal network and are
+  unreachable from the host. Startup is gated by healthchecks
+  (mysql → backend → frontend), MySQL data persists in the `mysql-data`
+  volume, and Flyway migrates the schema on every backend boot — upgrading
+  is just recreating the backend container.
+- **Secrets** come from `.env` (never committed): `JWT_SECRET` and
+  `DB_PASSWORD` are required — compose fails fast without them. Stripe and
+  Discord stay optional (their endpoints answer 503 until configured); point
+  provider webhooks and the Discord redirect at your domain.
+- The dev `docker-compose.yml` is untouched; both stacks can run side by
+  side (separate project name, volume and ports).
+
+### Going live on a domain: HTTPS (Caddy)
+
+`docker-compose.caddy.yml` is an override that puts a **Caddy** edge in
+front of the same stack: Caddy becomes the only published port (80/443),
+obtains and renews Let's Encrypt certificates for the apex **and** `www`, and
+reverse-proxies to the nginx container over the compose network — so the
+browser still sees one origin and CORS never applies.
+
+```bash
+# 1. Buy a domain (e.g. Porkbun ~$11/yr) and point DNS at the server:
+#      A    @   → <server public IPv4>
+#      CNAME www → <apex domain>          # never a CNAME on the apex itself
+# 2. Open the firewall (ufw example):
+#      ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
+# 3. In .env set the three domain values:
+#      APP_DOMAIN=example.com
+#      APP_BASE_URL=https://example.com
+#      DISCORD_REDIRECT_URI=https://example.com/auth/discord
+# 4. Start (Docker Compose v2.24+ — the override uses the !override tag):
+docker compose -f docker-compose.prod.yml -f docker-compose.caddy.yml up -d --build
+```
+
+Verify from outside the server:
+
+```bash
+curl -sI https://example.com | head -1                    # 200 (SPA shell)
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://example.com/api/workspaces                      # 401 = proxy reached the API
+```
+
+- **Certificates** live in the `caddy-data` volume: recreating containers is
+  safe, wiping that volume forces re-issuance (rate-limited by Let's
+  Encrypt). The first certificate appears only once DNS resolves; if the
+  records are wrong Caddy keeps retrying with backoff.
+- **Nothing but Caddy is public.** The override rebinds the frontend to a
+  loopback-only debug port (`127.0.0.1:8081`); backend and MySQL stay on the
+  internal network, and actuator health is only ever probed by compose
+  healthchecks.
+- **Scheme-aware proxying:** `frontend/nginx.conf` forwards the edge's
+  `X-Forwarded-Proto` (Caddy ignores client-supplied `X-Forwarded-*`), so
+  Spring sees `https://example.com` and same-origin POSTs — login, register —
+  pass without adding the domain to `CORS_ALLOWED_ORIGINS`.
+- Once configured, point Stripe webhooks and the Discord redirect at
+  `https://<domain>`, and schedule off-host `mysqldump` backups: the
+  `mysql-data` volume lives and dies with the server.
 
 ## How tenant isolation works
 
@@ -166,7 +292,7 @@ All workspace-scoped endpoints require `Authorization: Bearer <token>` and
 | rep csv | `POST /api/reps/import/preview`, `POST /api/reps/import` | manager+ |
 | rep portal | `GET /api/me/rep`, `GET /api/me/placement`, `GET /api/me/open-offers` | any member |
 | clients | `GET/POST /api/clients`, `PUT/DELETE /{id}` | manager+ |
-| offers | `GET /api/offers` (filters `q`, `verticalId`, `effectiveStatus`), `POST`, `PUT /{id}`, `POST /{id}/close` | manager+ |
+| offers | `GET /api/offers` (filters `q`, `verticalId`, `effectiveStatus`), `POST`, `PUT /{id}`, `POST /{id}/close`, `POST /{id}/stage` (P8 board move) | manager+ |
 | placements | `POST /api/placements`, `POST /api/placements/{id}/end`, `GET ?offerId= / ?repId=` | manager+ |
 | placement requests | `POST /api/placement-requests`, `GET ?status=`, `POST /{id}/approve`, `POST /{id}/decline` | create: any member (rep: own profile only); decisions: manager+ |
 | lookups | `GET/POST /api/verticals`, `/statuses`, `/experience-levels`, `PUT/DELETE /{id}` | read: any member; write: admin+ |
@@ -190,6 +316,10 @@ All workspace-scoped endpoints require `Authorization: Bearer <token>` and
 | payments webhook | `POST /api/payments/webhooks/razorpay` — HMAC verified over the raw body *before* parsing, idempotent, unknown events acknowledged-and-ignored | public (outside the JWT chain) |
 | intros | `GET/PUT /api/intros/profile`, `GET /api/intros/suggestions`, `POST /api/intros/requests` (`{targetUserId, reason?}`), `GET /api/intros/requests/incoming|outgoing`, `POST /api/intros/requests/{id}/accept|decline` | any member (accept/decline: target only, server-enforced) |
 | mastermind pods | `POST /api/pods/generate`, `POST /api/pods/publish`, `GET /api/pods`, `GET /api/pods/{id}`, `POST/GET /api/pods/{id}/checkins`, `POST/GET /api/pods/{id}/messages` | generate/publish: admin+; reads: own pods (admins all); check-in & thread: pod members |
+| weekly digest | `GET /api/digest`, `POST /api/digest/build` | admin+; builds are idempotent per (workspace, ISO week) |
+| engagement health | `GET /api/engagement/dashboard`, `POST /api/engagement/refresh`, `POST /api/engagement/members/{userId}/nudge` | owner (DROP/INACTIVE churn signals from the snapshots; nudge goes through the Discord seam) |
+| pipeline stages (P8) | `GET /api/pipeline/stages`; `POST`; `PUT /{id}`; `POST /{id}/move` (`{direction: UP\|DOWN}` → full order); `DELETE /{id}` | read: any member; write: admin+ (delete blocked while the stage holds offers; the last column is kept) |
+| pipeline board (P8) | `GET /api/pipeline/board` — columns in stage order, each with its offers | manager+ |
 
 Every Phase 7 endpoint is **[PRO]**: on the free plan it answers `402` with
 `code: PRO_FEATURE_REQUIRED` and a message that names the upgrade, and the UI
@@ -233,7 +363,7 @@ Error envelope for every failure:
   | language | 8 | required language among the rep's languages; full when none required |
   | timezone | 8 | rep's UTC offset at the start date falls inside the offer's window; 0 if the rep has no timezone |
   | availability | 16 | available-from ≤ start date (unset = immediately); full when no start date |
-  | performance | 8 | past performance — reserved for Phase 7 data; excluded from the denominator until then |
+  | performance | 8 | the rep's Phase 7 performance index — quarter-to-date leaderboard activity, each metric scaled to the workspace's best and averaged across metrics (0–100 = fraction of the workspace's best); excluded from the denominator when the rep has no logged activity |
 
   A factor with no requirement scores full and says so; the final score is
   `round(100 × points ÷ applicable weight)`, clamped to 0–100. Each factor
@@ -295,6 +425,30 @@ below answers `402 PRO_FEATURE_REQUIRED` and the UI shows the upgrade notice.
   the same ledger; manager-only Payouts and Commission-rules tabs; the
   leaderboard with period chips and a metric picker.
 
+## Offer pipeline board (Phase 8)
+
+- **Configurable stages:** every workspace ships with four ordered columns —
+  *Sourcing / Interviewing / Onboarding / Live* (V6 seeds existing
+  workspaces, `DefaultSeedService` seeds new ones). Stages are added,
+  renamed, reordered and deleted from the board's "Manage stages" panel;
+  reading the list is open to every member, writing needs admin+.
+- **Board consistency:** positions stay contiguous `1..n` after every write;
+  names are unique per workspace (case-insensitive → `409`); a stage deletes
+  only while empty (the 409 names the offer count); and a workspace always
+  keeps its last column — offers are never orphaned.
+- **Moving offers:** `POST /api/offers/{id}/stage` (manager+) moves an offer
+  to another column; the target stage must belong to the same workspace
+  (foreign or unknown id → `404`). New offers land in the first column, and
+  an offer without a stage renders there instead of disappearing.
+- **Accessible kanban (`/board`):** each column is a labelled section holding
+  a real list, and every card carries a labelled "move to stage" `<select>`,
+  so the whole board — including moving cards between columns — works from
+  the keyboard alone. HTML5 drag-and-drop is a supplementary pointer
+  affordance on the same move action, and every completed or failed move is
+  announced through a polite `role="status"` live region. Reps get a clear
+  "manager access required" state instead of an empty grid; stage
+  management is hidden for non-admins and enforced server-side regardless.
+
 ## Discord integration (Phase 5)
 
 - **Login with Discord** (`GET /api/auth/discord/url` → redirect →
@@ -355,19 +509,49 @@ notifier seam, and **contact details are revealed only after they accept**
 
 ## Mastermind pods
 
-Admins generate a deterministic, industry- then revenue-stage-adjacent
-preview of the workspace's active members into pods of ~5–8, may adjust
-the drafts by hand, then publish — the preview grouping is exactly what
-publish writes, and the previous generation is archived. Each pod is
+Admins generate a deterministic preview of the workspace's active members
+into pods of 2–8, balanced by industry **and** revenue stage: members are
+sorted industry-major then by stage, whole industry+stage cohorts are packed
+into pods first-fit, a cohort is split only when it alone exceeds a pod
+(then into near-equal parts), and a pod is never closed at a single member.
+Admins may adjust the drafts by hand, then publish — the preview grouping
+is exactly what publish writes, and the previous generation is archived.
+Each pod is
 private to its members (and admins): a roster with per-member attendance
 streaks, a private message thread (`pod_messages`, V10), plus one check-in
 per ISO week (wins / blockers / ask) feeding a recent-activity feed. UI at
 `/pods`.
 
+## Weekly digest
+
+Every Monday at 08:00 (`DIGEST_CRON`) each active workspace gets one
+plain-text digest — activity, new members, top contributors, pipeline —
+rendered through the `Summarizer` seam (a templated default; an LLM can
+replace it without touching the service), stored in `digest_logs` (one row
+per workspace and ISO week, so the job is idempotent even on a double fire)
+and delivered through the existing Discord notifier. Reads are admin+;
+`POST /api/digest/build` renders the current week on demand. Email queues
+behind the same seam once SMTP exists — no paid API dependency anywhere.
+
+## Engagement health
+
+A nightly job (02:30, `ENGAGEMENT_CRON`) — or the owner's
+`POST /api/engagement/refresh` — stores one row per member per day in
+`engagement_snapshots` (V11): weighted trailing-30-day activity (audit
+actions ×1, pod check-ins ×4, thread messages ×2, intro activity ×3,
+office-hour bookings ×3) plus days-inactive. The owner-only dashboard
+(`GET /api/engagement/dashboard`) flags members whose score fell to ≤50% of
+the previous snapshot against a noise floor (**DROP**) or who have been
+silent for 14+ days (**INACTIVE**), and
+`POST /api/engagement/members/{userId}/nudge` sends a templated nudge
+through the `DiscordNotifier` seam with an audit row. Rows are append-only
+per (workspace, member, day), so refreshes and re-fires are no-ops. UI at
+`/engagement`.
+
 ## Database
 
-28 tables; the schema is owned by Flyway
-(`backend/src/main/resources/db/migration`, V1–V5):
+40 tables; the schema is owned by Flyway
+(`backend/src/main/resources/db/migration`, V1–V11):
 
 - Global: `plans`, `users`
 - Tenant-scoped (all carry `workspace_id`): `workspaces`, `memberships`,
@@ -377,7 +561,11 @@ per ISO week (wins / blockers / ask) feeding a recent-activity feed. UI at
   `skill_tags`, `rep_skills`, `rep_languages`, `rep_preferred_verticals`,
   `rep_photos`, `offer_required_skills` (V4),
   `metric_types`, `activity_entries`, `payouts`, `commission_rules`,
-  `ledger_entries` (V5)
+  `ledger_entries` (V5), `pipeline_stages` (V6),
+  `office_hour_slots`, `office_hour_bookings` (V7),
+  `member_profiles`, `intro_requests` (V8),
+  `pods`, `pod_members`, `pod_checkins` (V9), `pod_messages` (V10),
+  `engagement_snapshots`, `digest_logs` (V11)
 - Derived state is never stored: a rep is *Placed* when they have an active
   placement; an offer is *Filled* when active placements ≥ seats, *Closed*
   when its stored status is closed, otherwise *Open* (computed at query time).
@@ -385,8 +573,9 @@ per ISO week (wins / blockers / ask) feeding a recent-activity feed. UI at
   (`WorkspacePurgeJob`) removes children in dependency order.
 - New workspaces are seeded (in Java — Flyway cannot run `DELIMITER` stored
   procedures) with verticals *Sales / Advertising / Partnerships*, statuses
-  *Bench / Training / Inactive*, levels *Junior / Mid / Senior*, plus a
-  trialing subscription on the free plan.
+  *Bench / Training / Inactive*, levels *Junior / Mid / Senior*, activity
+  metrics (Phase 7) and the board columns *Sourcing / Interviewing /
+  Onboarding / Live* (Phase 8), plus a trialing subscription on the free plan.
 
 ## Tests
 
@@ -409,8 +598,12 @@ per ISO week (wins / blockers / ask) feeding a recent-activity feed. UI at
 | `OfficeHoursTest` | expert gating on every slot/booking surface, booking confirmed only by the verified webhook, cancel/refund state machine with ledger reversals, per-space commission, tenant isolation |
 | `IntrosTest` | tag-overlap ranking with reasons, suggestion cap + duplicate/self refusal, max 3 pending requests, contact revealed only to the accepted pair, cross-workspace isolation |
 | `PodsTest` | deterministic preview == published output (industry + revenue-stage grouping), manual draft overrides + previous-generation archive, check-in membership / one-per-week / streak rules, private-thread privacy (members + admins, tenant-scoped), tenant isolation |
+| `DigestTest` | templated digest rendering with the real facts, one row per (workspace, ISO week), repeat builds return the stored row, admin+ tenant-scoped reads, system-wide cron path works without a tenant context, schedule disabled in tests |
+| `EngagementTest` | weighted 30-day window computed from real activity (audit/check-ins/messages/intros), refresh idempotent per day across the request and job paths, DROP/INACTIVE dashboard signals vs the seeded previous snapshot, owner-only gating, nudge delivered through the `DiscordNotifier` seam + audit row, cross-workspace nudge refused, job bean absent |
+| frontend engagement dashboard | at-risk rows with DROP/INACTIVE pills and the previous score, nudge POST payload + sent confirmation, refresh POST, pre-snapshot empty state |
 | frontend community features | office-hours/intros/pods pages against the mocked API: exact request payloads, accept/contact reveal, book & pay flow, meeting link save, check-in body, role-gated generate panel |
-| frontend `src/test/` | roster/offer pages against the mocked API, billing upgrade/plan flows, Discord login + callback, reports rendering, branding/discord settings forms, bench-aging pills, CSV export download, activity feed paging, Phase 6 filters/profile form/suggested-reps panel, Phase 7 PRO gating, role tabs, minor-unit money conversion, payout batching, metric management |
+| `Phase8PipelineTest` | default stages ship with every workspace and new offers land in the first column; the board groups offers under their columns in stage order; offer moves follow the manager bar and never cross workspaces (foreign/unknown stage → 404); stage config follows the admin bar — case-insensitive duplicate names → 409, contiguous 1..n positions after reorder/delete, empty-only deletion, last column always kept; stageless offers render in the first column |
+| frontend `src/test/` | roster/offer pages against the mocked API, billing upgrade/plan flows, Discord login + callback, reports rendering, branding/discord settings forms, bench-aging pills, CSV export download, activity feed paging, Phase 6 filters/profile form/suggested-reps panel, Phase 7 PRO gating, role tabs, minor-unit money conversion, payout batching, metric management, Phase 8 board (columns/cards, keyboard move + live-region announcement, stage management panel, rep permission state) |
 
 ## Configuration
 
@@ -420,7 +613,12 @@ All configuration comes from environment variables (see `.env.example`):
 `BILLING_PROVIDER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
 `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`/`RAZORPAY_WEBHOOK_SECRET` (Razorpay is
 implemented — subscriptions and office-hour bookings), `DISCORD_CLIENT_ID/SECRET/REDIRECT_URI/BOT_TOKEN`,
-and test-only `ROSTER_TEST_DB_*`.
+`DIGEST_CRON`/`DIGEST_JOB_ENABLED` and
+`ENGAGEMENT_CRON`/`ENGAGEMENT_JOB_ENABLED`/`ENGAGEMENT_WINDOW_DAYS`/
+`ENGAGEMENT_INACTIVE_DAYS`/`ENGAGEMENT_DROP_PERCENT`/
+`ENGAGEMENT_MIN_PREVIOUS_SCORE` (feature-5 schedules, windows and churn
+thresholds), and
+test-only `ROSTER_TEST_DB_*`.
 
 ## Assumptions
 

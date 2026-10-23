@@ -22,4 +22,10 @@ public interface DiscordNotifier {
 
     /** A member accepted an intro request. */
     void introAccepted(Long workspaceId, String fromName, String toName);
+
+    /** A workspace's weekly digest is ready (the durable copy lives in digest_logs). */
+    void weeklyDigest(Long workspaceId, String body);
+
+    /** An owner nudged an at-risk member from the engagement dashboard. */
+    void engagementNudge(Long workspaceId, String memberName, String reason);
 }

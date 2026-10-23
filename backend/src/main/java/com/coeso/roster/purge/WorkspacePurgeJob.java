@@ -24,22 +24,69 @@ public class WorkspacePurgeJob {
 
     private static final Logger log = LoggerFactory.getLogger(WorkspacePurgeJob.class);
 
-    /** Child tables in FK-safe deletion order (parents of a row come later). */
-    private static final List<String> CHILD_TABLES = List.of(
+    /**
+     * Child tables in FK-safe deletion order (every child is deleted before
+     * any table it references through an FK). Covers every tenant table from
+     * V1 to V11: a workspace_id column exists only on these tables plus
+     * {@code workspaces} itself, which is kept as a tombstone — and
+     * {@code WorkspacePurgeTest} asserts exactly that against
+     * information_schema, so a future migration that adds a child table fails
+     * the suite until it is listed here.
+     *
+     * <p>The original V1-only list made every purge of a workspace with rows
+     * in a later table fail with {@code Cannot delete or update a parent row}
+     * (observed live on 2026-10-20: {@code offer_required_skills} (V4)
+     * blocking {@code offers}), leaving the children un-purged forever.
+     */
+    public static final List<String> CHILD_TABLES = List.of(
+            // V5 ledger chain first: ledger_entries references activity_entries,
+            // commission_rules and payouts as well as placements/reps, so it
+            // goes before all of them; those in turn before placements / offers.
+            "ledger_entries",
+            "commission_rules",
+            "payouts",
+            "activity_entries",
+            // V1 offer/pipeline side
             "placement_requests",
             "placements",
-            "offers",
+            // V4 children of offers / reps / skill_tags
+            "offer_required_skills",
+            "rep_skills",
+            "rep_languages",
+            "rep_preferred_verticals",
+            "rep_photos",
+            "memberships", // memberships.rep_id -> reps
+            // V7 office hours: payout ledger -> booking -> slot
+            "payout_ledger_entries",
+            "office_hour_bookings",
+            "offers", // -> clients, verticals, experience_levels, pipeline_stages
+            "office_hour_slots",
+            "pipeline_stages",
             "clients",
+            // V1 workspace-level children
             "invites",
             "subscriptions",
             "billing_events",
             "workspace_discord",
             "audit_log",
-            "memberships",
+            // V9/V10 pod children before pods
+            "pod_members",
+            "pod_checkins",
+            "pod_messages",
+            "pods",
+            // V4 tags after rep_skills / offer_required_skills reference them
+            "skill_tags",
+            // reps after everything that references them; lookups after reps
             "reps",
             "verticals",
             "rep_statuses",
-            "experience_levels");
+            "experience_levels",
+            // V5/V8/V11 workspace-level children
+            "metric_types",
+            "member_profiles",
+            "intro_requests",
+            "engagement_snapshots",
+            "digest_logs");
 
     private final WorkspaceRepository workspaces;
     private final TransactionTemplate transactionTemplate;

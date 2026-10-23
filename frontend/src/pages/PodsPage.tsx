@@ -105,12 +105,15 @@ function AdminPanelInner() {
       {preview && (
         <>
           {preview.map((d, i) => (
-            <div className="lookup-row" key={`${d.industry ?? 'general'}-${i}`}>
-              <span className="name">
-                {d.industry ?? 'General'}
-                <span className="muted"> — {d.userIds.length} members</span>
-              </span>
-              <span className="muted">{d.names.filter(Boolean).join(', ')}</span>
+            <div key={`${d.industry ?? 'general'}-${i}`}>
+              <div className="lookup-row">
+                <span className="name">
+                  {d.industry ?? 'General'}
+                  <span className="muted"> — {d.userIds.length} members</span>
+                </span>
+                <span className="muted">{d.names.filter(Boolean).join(', ')}</span>
+              </div>
+              <StageComposition stages={d.revenueStages ?? []} />
             </div>
           ))}
           <button
@@ -220,6 +223,8 @@ function PodCard({
         </button>
       </div>
 
+      <StageComposition stages={(pod?.members ?? []).map((m) => m.revenueStage)} />
+
       <div className="board-list">
         {(pod?.members ?? []).map((m) => (
           <div className="lookup-row" key={m.userId}>
@@ -327,6 +332,37 @@ function PodCard({
       >
         {post.isPending ? 'Posting…' : 'Post'}
       </button>
+    </div>
+  );
+}
+
+// ------------------------------------------------------- stage composition
+
+/**
+ * Revenue-stage mix for a pod — one pill per distinct stage with its member
+ * count. Pods are balanced by industry *and* revenue stage, so this shows how
+ * varied (or homogeneous) each group actually is. Members who never set a
+ * stage in their intro profile count as "Unspecified".
+ */
+function StageComposition({
+  stages,
+}: {
+  stages: (string | null | undefined)[];
+}) {
+  const tally = new Map<string, number>();
+  for (const raw of stages) {
+    const key = raw && raw.trim() ? raw.trim() : 'Unspecified';
+    tally.set(key, (tally.get(key) ?? 0) + 1);
+  }
+  if (tally.size === 0) return null;
+  return (
+    <div className="stage-composition" aria-label="Revenue stage mix">
+      <span className="muted stage-composition-label">Revenue stages</span>
+      {[...tally.entries()].map(([stage, count]) => (
+        <span className="pill" key={stage}>
+          {stage} · {count}
+        </span>
+      ))}
     </div>
   );
 }

@@ -35,5 +35,13 @@ public final class IntrosRepos {
         long countByWorkspaceIdAndFromUserIdAndStatus(
                 @Param("workspaceId") Long workspaceId, Long fromUserId,
                 IntroRequest.Status status);
+
+        /** Workspace-wide pending count — the weekly digest's pipeline line. */
+        long countByWorkspaceIdAndStatus(
+                @Param("workspaceId") Long workspaceId, IntroRequest.Status status);
+
+        /** Workspace-wide rows — the engagement window's intro activity. */
+        java.util.List<IntroRequest> findByWorkspaceId(
+                @Param("workspaceId") Long workspaceId);
     }
 }

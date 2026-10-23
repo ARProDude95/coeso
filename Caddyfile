@@ -1,0 +1,32 @@
+# HTTPS edge for the Roster stack (used by docker-compose.caddy.yml).
+#
+# Caddy obtains and renews Let's Encrypt certificates for every hostname in
+# this site block automatically — no certbot, no cron. Requirements:
+#   * APP_DOMAIN (injected from .env) already resolves to this host:
+#       A    @   → <server IPv4>
+#       CNAME www → <apex domain>
+#   * ports 80 and 443 reach this container (published by the compose file)
+#
+# Certificates, the ACME account key and renewal state live in the caddy-data
+# volume — recreating the container is safe, wiping that volume is not.
+
+{$APP_DOMAIN}, www.{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# nginx serves the SPA and proxies /api itself, so the browser keeps a
+	# single origin behind this proxy (same pattern as the dev Vite proxy).
+	# Caddy preserves the original Host header, so nginx and Spring see the
+	# real domain; X-Forwarded-* record the client's scheme and address.
+	reverse_proxy frontend:80 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+
+	# HSTS is safe here: both hostnames are served over HTTPS by this block.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

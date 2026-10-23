@@ -10,6 +10,7 @@ import WorkspacePickerPage from './pages/WorkspacePickerPage';
 import CreateWorkspacePage from './pages/CreateWorkspacePage';
 import RosterPage from './pages/RosterPage';
 import OffersPage from './pages/OffersPage';
+import BoardPage from './pages/BoardPage';
 import SettingsPage from './pages/SettingsPage';
 import PricingPage from './pages/PricingPage';
 import ReportsPage from './pages/ReportsPage';
@@ -17,6 +18,7 @@ import PerformancePage from './pages/PerformancePage';
 import OfficeHoursPage from './pages/OfficeHoursPage';
 import IntrosPage from './pages/IntrosPage';
 import PodsPage from './pages/PodsPage';
+import EngagementPage from './pages/EngagementPage';
 
 /**
  * Route guards:
@@ -87,11 +89,13 @@ export default function App() {
         <Route path="/" element={<Navigate to="/roster" replace />} />
         <Route path="/roster" element={<RosterPage />} />
         <Route path="/offers" element={<OffersPage />} />
+        <Route path="/board" element={<BoardPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/performance" element={<PerformancePage />} />
         <Route path="/office-hours" element={<OfficeHoursPage />} />
         <Route path="/intros" element={<IntrosPage />} />
         <Route path="/pods" element={<PodsPage />} />
+        <Route path="/engagement" element={<EngagementPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/pricing" element={<PricingPage />} />
       </Route>

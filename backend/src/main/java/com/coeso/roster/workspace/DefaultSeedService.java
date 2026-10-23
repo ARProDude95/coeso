@@ -2,11 +2,13 @@ package com.coeso.roster.workspace;
 
 import com.coeso.roster.entity.ExperienceLevel;
 import com.coeso.roster.entity.MetricType;
+import com.coeso.roster.entity.PipelineStage;
 import com.coeso.roster.entity.RepStatus;
 import com.coeso.roster.entity.StatusKind;
 import com.coeso.roster.entity.Vertical;
 import com.coeso.roster.repo.Repositories.ExperienceLevelRepository;
 import com.coeso.roster.repo.Repositories.MetricTypeRepository;
+import com.coeso.roster.repo.Repositories.PipelineStageRepository;
 import com.coeso.roster.repo.Repositories.RepStatusRepository;
 import com.coeso.roster.repo.Repositories.VerticalRepository;
 import java.util.List;
@@ -43,18 +45,25 @@ public class DefaultSeedService {
             new MetricSeed("Deals closed", MetricType.Unit.COUNT),
             new MetricSeed("Revenue generated", MetricType.Unit.CURRENCY));
 
+    /** Phase 8: board columns, in order (same names the migration seeds). */
+    private static final List<String> DEFAULT_STAGES =
+            List.of("Sourcing", "Interviewing", "Onboarding", "Live");
+
     private final VerticalRepository verticals;
     private final RepStatusRepository statuses;
     private final ExperienceLevelRepository experienceLevels;
     private final MetricTypeRepository metricTypes;
+    private final PipelineStageRepository pipelineStages;
 
     public DefaultSeedService(VerticalRepository verticals, RepStatusRepository statuses,
                               ExperienceLevelRepository experienceLevels,
-                              MetricTypeRepository metricTypes) {
+                              MetricTypeRepository metricTypes,
+                              PipelineStageRepository pipelineStages) {
         this.verticals = verticals;
         this.statuses = statuses;
         this.experienceLevels = experienceLevels;
         this.metricTypes = metricTypes;
+        this.pipelineStages = pipelineStages;
     }
 
     public void seed(Long workspaceId) {
@@ -85,6 +94,15 @@ public class DefaultSeedService {
             metric.setName(seed.name());
             metric.setUnit(seed.unit());
             metricTypes.save(metric);
+        }
+        // Phase 8: default board columns (new offers land in the first one).
+        int position = 1;
+        for (String name : DEFAULT_STAGES) {
+            PipelineStage stage = new PipelineStage();
+            stage.setWorkspaceId(workspaceId);
+            stage.setName(name);
+            stage.setPosition(position++);
+            pipelineStages.save(stage);
         }
     }
 }

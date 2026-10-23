@@ -144,6 +144,9 @@ export interface Offer {
   tzWindowEnd?: number | null;
   startDate?: string | null;
   requiredSkills?: string[];
+  // Phase 8 pipeline (undefined on older payloads)
+  stageId?: number | null;
+  stageName?: string | null;
 }
 
 export interface OfferInput {
@@ -428,6 +431,65 @@ export function updateOffer(id: number, input: OfferInput) {
 
 export function closeOffer(id: number) {
   return request<Offer>(`/api/offers/${id}/close`, { method: 'POST' });
+}
+
+// ------------------------------------------------------------- pipeline (P8)
+
+export interface PipelineStage {
+  id: number;
+  name: string;
+  position: number;
+}
+
+/** One column of GET /api/pipeline/board: the stage plus its offers. */
+export interface StageBoard {
+  stage: PipelineStage;
+  offers: Offer[];
+}
+
+/** Stage reads are open to every member; writes need admin (server-enforced). */
+export function listStages() {
+  return request<PipelineStage[]>('/api/pipeline/stages');
+}
+
+export function createStage(name: string) {
+  return request<PipelineStage>('/api/pipeline/stages', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function renameStage(id: number, name: string) {
+  return request<PipelineStage>(`/api/pipeline/stages/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** Swaps a column with its neighbour; answers with the full new order. */
+export function moveStageColumn(id: number, direction: 'UP' | 'DOWN') {
+  return request<PipelineStage[]>(`/api/pipeline/stages/${id}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ direction }),
+  });
+}
+
+export function deleteStage(id: number) {
+  return request<void>(`/api/pipeline/stages/${id}`, { method: 'DELETE' });
+}
+
+/** The kanban board: columns in stage order, offers grouped underneath. */
+export function fetchBoard() {
+  return request<StageBoard[]>('/api/pipeline/board');
+}
+
+/** Moves an offer to another column — the board's drop target or its
+ *  keyboard-accessible move select both land here. */
+export function moveOfferStage(offerId: number, stageId: number) {
+  return request<Offer>(`/api/offers/${offerId}/stage`, {
+    method: 'POST',
+    body: JSON.stringify({ stageId }),
+  });
 }
 
 // ---------------------------------------------------------------- placements
@@ -1253,6 +1315,8 @@ export interface PodMemberLine {
   userId: number;
   displayName: string | null;
   streak: number | null;
+  /** Revenue stage from the member's intro profile (undefined on older payloads). */
+  revenueStage?: string | null;
 }
 
 export interface PodView {
@@ -1266,6 +1330,8 @@ export interface PodDraftView {
   industry: string | null;
   userIds: number[];
   names: (string | null)[];
+  /** Per-member revenue stage, parallel to userIds (undefined on older payloads). */
+  revenueStages?: (string | null)[];
 }
 
 export interface PodDraftInput {
@@ -1339,4 +1405,54 @@ export function submitPodCheckin(
 
 export function listPodCheckins(podId: number) {
   return request<PodCheckinView[]>(`/api/pods/${podId}/checkins`);
+}
+
+// ------------------------------------------------------- engagement health
+
+export interface EngagementSnapshotView {
+  userId: number;
+  displayName: string | null;
+  snapshotDate: string;
+  score: number;
+  auditActions: number;
+  podCheckins: number;
+  podMessages: number;
+  introActivity: number;
+  bookings: number;
+  daysInactive: number;
+}
+
+export interface EngagementRiskMember {
+  userId: number;
+  displayName: string | null;
+  score: number;
+  previousScore: number | null;
+  daysInactive: number;
+  reasons: string[];
+}
+
+export interface EngagementDashboard {
+  snapshotDate: string | null;
+  membersConsidered: number;
+  atRisk: EngagementRiskMember[];
+}
+
+export interface EngagementNudge {
+  userId: number;
+  displayName: string | null;
+  reason: string;
+}
+
+export function getEngagementDashboard() {
+  return request<EngagementDashboard>('/api/engagement/dashboard');
+}
+
+export function refreshEngagement() {
+  return request<EngagementSnapshotView[]>('/api/engagement/refresh', { method: 'POST' });
+}
+
+export function nudgeEngagementMember(userId: number) {
+  return request<EngagementNudge>(`/api/engagement/members/${userId}/nudge`, {
+    method: 'POST',
+  });
 }

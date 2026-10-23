@@ -212,8 +212,8 @@ const myPods = [
     name: 'Cohort 1',
     industry: 'Fintech',
     members: [
-      { userId: 1, displayName: 'You', streak: 2 },
-      { userId: 8, displayName: 'Vikram', streak: null },
+      { userId: 1, displayName: 'You', streak: 2, revenueStage: 'Seed' },
+      { userId: 8, displayName: 'Vikram', streak: null, revenueStage: 'Series A' },
     ],
   },
 ];
@@ -305,6 +305,40 @@ describe('PodsPage', () => {
     const { container } = renderPage(<PodsPage />);
     await screen.findByText(/You're not in any active pod yet/i);
     expect(container.querySelector('h2')).not.toHaveTextContent('Generate pods');
+  });
+
+  it('shows the revenue-stage composition on the pod card and in the preview', async () => {
+    setActiveWorkspaceId(1);
+    localStorage.setItem('roster.workspace', '1');
+    mockFetch({
+      '/api/workspaces': { body: [{ id: 1, name: 'Acme', slug: 'acme', role: 'OWNER' }] },
+      '/api/pods/3/messages': { method: 'GET', body: [] },
+      '/api/pods/3/checkins': { method: 'GET', body: [] },
+      '/api/pods/3': { body: myPods[0] },
+      '/api/pods/generate': {
+        method: 'POST',
+        body: [
+          {
+            industry: 'Fintech',
+            userIds: [1, 2],
+            names: ['You', 'Sam'],
+            revenueStages: ['Seed', 'Seed'],
+          },
+        ],
+      },
+      '/api/pods': { body: myPods },
+    } as RouteTable);
+
+    renderPage(<PodsPage />);
+
+    // Published pod card: one pill per distinct stage with its member count.
+    await screen.findByText('Cohort 1');
+    expect(await screen.findAllByText(/^Seed · 1$/)).not.toHaveLength(0);
+    expect(await screen.findAllByText(/^Series A · 1$/)).not.toHaveLength(0);
+
+    // The admin preview shows the draft's stage mix before publishing.
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate preview' }));
+    expect(await screen.findAllByText(/^Seed · 2$/)).not.toHaveLength(0);
   });
 
   it('lets an owner preview and publish pods', async () => {

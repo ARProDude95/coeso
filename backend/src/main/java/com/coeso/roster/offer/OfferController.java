@@ -51,6 +51,14 @@ public class OfferController {
         return offerService.close(id);
     }
 
+    /** Moves an offer to another pipeline column (POST — board move action). */
+    @PostMapping("/{id}/stage")
+    public OfferService.OfferResponse moveStage(
+            @PathVariable Long id,
+            @Valid @RequestBody OfferService.StageMoveRequest request) {
+        return offerService.moveStage(id, request);
+    }
+
     /**
      * "Suggested reps": available reps ranked 0–100 against this offer's
      * requirements with the per-factor breakdown. Manager+ (service-guarded);

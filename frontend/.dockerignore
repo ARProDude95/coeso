@@ -1,0 +1,3 @@
+# Build context only needs sources + manifests.
+node_modules/
+dist/
