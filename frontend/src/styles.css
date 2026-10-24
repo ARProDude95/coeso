@@ -1025,6 +1025,19 @@ label {
 
 .settings-section { margin-bottom: 2.2rem; }
 
+/* Weekly digest body: pre-formatted plain text from the Summarizer seam. */
+.digest-body {
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  line-height: 1.7;
+  color: var(--text);
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
 .lookup-row {
   display: flex;
   align-items: center;

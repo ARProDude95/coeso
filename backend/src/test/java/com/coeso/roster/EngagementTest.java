@@ -34,7 +34,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *  - the templated nudge goes through the DiscordNotifier seam and writes an
  *    audit row,
  *  - reads are owner-only, other workspaces cannot nudge foreign members, and
- *    the schedule itself is disabled in tests (job bean absent).
+ *    the schedule itself is disabled in tests (job bean absent),
+ *  - phase 12: the whole surface is [PRO] — 402 PRO_FEATURE_REQUIRED on the
+ *    free plan, working after an upgrade, and the nightly job skips (never
+ *    fails on) workspaces below Pro.
  */
 class EngagementTest extends IntegrationTest {
 
@@ -49,6 +52,7 @@ class EngagementTest extends IntegrationTest {
     void refreshComputesWeightedSnapshotsAndStaysIdempotent() throws Exception {
         Account owner = register("en-refresh");
         long ws = createWorkspace(owner, "Engagement Refresh " + sfx, null);
+        moveToPlan(ws, "pro");
         Account member = register("en-refresh-m");
         addMember(ws, member.userId(), WorkspaceRole.MANAGER);
 
@@ -102,6 +106,7 @@ class EngagementTest extends IntegrationTest {
     void dashboardFlagsDropsAndInactivityAndNudgesThroughTheSeam() throws Exception {
         Account owner = register("en-risk");
         long ws = createWorkspace(owner, "Engagement Risk " + sfx, null);
+        moveToPlan(ws, "pro");
         Account member = register("en-risk-m");
         addMember(ws, member.userId(), WorkspaceRole.MANAGER);
         Account dormant = register("en-risk-d");
@@ -164,6 +169,7 @@ class EngagementTest extends IntegrationTest {
     void readsAreOwnerGatedAndTenantScopedAndTheJobIsOff() throws Exception {
         Account owner = register("en-role");
         long ws = createWorkspace(owner, "Engagement Role " + sfx, null);
+        moveToPlan(ws, "pro");
         Account manager = register("en-role-m");
         addMember(ws, manager.userId(), WorkspaceRole.MANAGER);
 
@@ -181,12 +187,45 @@ class EngagementTest extends IntegrationTest {
         // Another workspace cannot nudge a foreign member.
         Account other = register("en-role-b");
         long wsB = createWorkspace(other, "Engagement Role B " + sfx, null);
+        moveToPlan(wsB, "pro");
         apiPost(other, wsB, "/api/engagement/members/" + owner.userId() + "/nudge", null)
                 .andExpect(status().isNotFound());
 
         // The nightly schedule itself is off in tests: EngagementTest drives
         // the service directly, exactly like DigestTest and its job.
         assertThat(applicationContext.getBeanNamesForType(EngagementJob.class)).isEmpty();
+    }
+
+    @Test
+    void freePlanAnswers402AndTheNightlyJobSkipsIt() throws Exception {
+        Account owner = register("en-pro");
+        long ws = createWorkspace(owner, "Engagement Free " + sfx, null); // free plan
+
+        // Every request path is gated with the same envelope the rest of the
+        // app uses, naming the feature and the plan that unlocks it.
+        apiGet(owner, ws, "/api/engagement/dashboard")
+                .andExpect(status().isPaymentRequired())
+                .andExpect(jsonPath("$.code").value("PRO_FEATURE_REQUIRED"))
+                .andExpect(jsonPath("$.details.feature").value("engagement health"))
+                .andExpect(jsonPath("$.details.planRequired").value("pro"))
+                .andExpect(jsonPath("$.message", containsString("needs the Pro plan")));
+        apiPost(owner, ws, "/api/engagement/refresh", null)
+                .andExpect(status().isPaymentRequired())
+                .andExpect(jsonPath("$.code").value("PRO_FEATURE_REQUIRED"));
+        apiPost(owner, ws, "/api/engagement/members/" + owner.userId() + "/nudge", null)
+                .andExpect(status().isPaymentRequired())
+                .andExpect(jsonPath("$.code").value("PRO_FEATURE_REQUIRED"));
+
+        // The nightly job is not an error path: it skips the workspace
+        // entirely, so a free workspace accumulates no snapshot rows.
+        engagementService.snapshotAllActiveWorkspaces();
+        assertThat(snapshots.findByWorkspaceIdAndSnapshotDate(ws, LocalDate.now())).isEmpty();
+
+        // Upgrade unlocks the same surface without any other change.
+        moveToPlan(ws, "pro");
+        apiPost(owner, ws, "/api/engagement/refresh", null).andExpect(status().isOk());
+        apiGet(owner, ws, "/api/engagement/dashboard").andExpect(status().isOk())
+                .andExpect(jsonPath("$.snapshotDate").value(LocalDate.now().toString()));
     }
 
     // ---------------------------------------------------------------- helpers

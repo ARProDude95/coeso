@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -75,6 +75,74 @@ describe('EngagementPage', () => {
       ).toBe(true);
     });
     await screen.findByText(/nudge sent — engagement dropped from 30 to 2/);
+  });
+
+  it('replaces the dashboard with an upgrade notice on the free plan', async () => {
+    setActiveWorkspaceId(1);
+    mockFetch({
+      '/api/engagement/dashboard': {
+        status: 402,
+        body: {
+          status: 402,
+          code: 'PRO_FEATURE_REQUIRED',
+          message:
+            "Feature 'engagement health' needs the Pro plan, but this workspace is on 'Free'.",
+        },
+      },
+    } as RouteTable);
+
+    renderPage(<EngagementPage />);
+
+    // The [PRO] gate is a plan state, not an error to shout about.
+    await screen.findByText('Engagement health is a Pro feature');
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Upgrade your plan' })).toHaveAttribute(
+      'href',
+      '/pricing',
+    );
+    // No data surface, no refresh action, and no raw error line behind it.
+    expect(screen.queryByRole('button', { name: /Refresh snapshots/ })).toBeNull();
+    expect(screen.queryByText(/needs the Pro plan/)).toBeNull();
+  });
+
+  it('switches to the upgrade notice when a refresh answers 402', async () => {
+    // A downgrade mid-session: the dashboard loaded fine, then every write is
+    // refused. The page must re-check the plan instead of leaving a dead button.
+    setActiveWorkspaceId(1);
+    let dashboardCalls = 0;
+    vi.stubGlobal('fetch', (input: string | URL) => {
+      const url = String(input);
+      const reply = (status: number, body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      if (url.startsWith('/api/engagement/dashboard')) {
+        dashboardCalls += 1;
+        return dashboardCalls === 1
+          ? reply(200, dashboard)
+          : reply(402, {
+              status: 402,
+              code: 'PRO_FEATURE_REQUIRED',
+              message: 'Feature \'engagement health\' needs the Pro plan.',
+            });
+      }
+      return reply(402, {
+        status: 402,
+        code: 'PRO_FEATURE_REQUIRED',
+        message: 'Feature \'engagement health\' needs the Pro plan.',
+      });
+    });
+
+    renderPage(<EngagementPage />);
+    await screen.findByText(/Priya/);
+
+    await userEvent.click(screen.getByRole('button', { name: /Refresh snapshots/ }));
+
+    await screen.findByText('Engagement health is a Pro feature');
+    expect(screen.queryByText(/Priya/)).toBeNull();
   });
 
   it('shows the empty state before any snapshot and refreshes on demand', async () => {

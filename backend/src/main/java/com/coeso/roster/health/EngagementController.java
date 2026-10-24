@@ -9,8 +9,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Engagement health endpoints. Everything here is owner-only (the dashboard
- * names at-risk members and the nudge messages them), enforced by the role
- * guard on each service method.
+ * names at-risk members and the nudge messages them) and [PRO] (402 on a plan
+ * below Pro), enforced by the guards on each service method.
  */
 @RestController
 @RequestMapping("/api/engagement")

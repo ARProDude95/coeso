@@ -55,6 +55,7 @@ frontend/           React + TypeScript + Vite app
 start-dev.sh        one-command stack: MySQL + backend + frontend + tunnel
 smoke-test.sh       end-to-end smoke test against that running stack
 smoke-community.sh  community smoke: profile, invites, pod generation, threads
+smoke-all.sh        both smokes back-to-back, one pass/fail verdict
 seed-demo.sh        seeds a review-ready demo workspace (reps/offers/placements)
 docker-compose.yml  MySQL 8 for local development
 .env.example        all environment variables, documented
@@ -114,12 +115,12 @@ Overrides: `FRONTEND_URL`, `DEMO_EMAIL`, `DEMO_PASSWORD`,
 ```bash
 # backend
 cd backend
-mvn test                            # full suite (131 tests)
+mvn test                            # full suite (133 tests)
 mvn test -Dtest=Phase7PerformanceTest        # one class
 
 # frontend
 cd frontend
-npm test                            # vitest (46 tests)
+npm test                            # vitest (53 tests)
 npx tsc --noEmit                    # typecheck
 
 # end-to-end smoke tests against the LIVE dev stack (run start-dev.sh first);
@@ -127,6 +128,7 @@ npx tsc --noEmit                    # typecheck
 # the localhost defaults.
 ./smoke-test.sh                     # or: bash smoke-test.sh
 ./smoke-community.sh                # community features (see below)
+./smoke-all.sh                      # both suites, one verdict (exit 0 = all green)
 ```
 
 - With Docker available, backend tests use **Testcontainers MySQL 8** (fresh
@@ -141,12 +143,41 @@ npx tsc --noEmit                    # typecheck
   It needs no Docker, only `./start-dev.sh` already up.
 - `smoke-community.sh` covers the community features the same way: intros
   profile (industry + revenue stage + tags) → invite lifecycle (create, list,
-  accept as a second registered user, single-use token → 409) → deterministic
-  pod generation (generate twice, previews must match, publish) → private pod
-  thread (post, read as a member, blank body → 400, outsider → 403) →
-  workspace cleanup. Repeatable back-to-back: every run uses fresh
+  accept as a second registered user, single-use token → 409) → intro request
+  (tag-overlap suggestion, pending for both sides with the contact still null,
+  requester cannot accept their own, duplicate pending → 409) → accept as the
+  target (status `accepted`, the pair now sees the invitee's login email, a
+  second accept → 409) → decline in the other direction (no contact revealed)
+  → deterministic pod generation (generate twice, previews must match,
+  publish) → private pod thread (post, read as a member, blank body → 400,
+  outsider → 403) → workspace cleanup. Repeatable back-to-back: every run uses fresh
   timestamped emails, so runs never collide; it drives the frontend origin
   when `:5173` is up and falls back to the backend directly otherwise.
+- `smoke-all.sh` is the wrapper for both: it runs `smoke-test.sh` then
+  `smoke-community.sh` back-to-back, streams each suite's output unchanged,
+  and finishes with a two-row summary plus one verdict — exit 0 only when
+  both suites exit 0. A failing suite never stops the other one, and the
+  assert totals (`N passed, M failed`) are read from each suite's own last
+  line, so the wrapper needs no knowledge of their contents. `BACKEND_URL` /
+  `FRONTEND_URL` are exported to both suites.
+
+### Continuous integration
+
+Two GitHub Actions workflows, each on its own runner OS:
+
+- **`.github/workflows/smoke.yml`** — every push, pull request and manual
+  run: boots a **throwaway** stack (MySQL 8 service container → Spring Boot
+  built with `mvn package` and migrated by Flyway on an empty database → Vite
+  dev server on `:5173`) and runs `bash smoke-all.sh` against it. No Discord
+  or billing credentials are set, so those seams stay no-op; the database dies
+  with the job. On failure the backend/frontend logs are uploaded as
+  `smoke-stack-logs`. It runs on `ubuntu-latest`: these are HTTP assertions,
+  not screenshots.
+- **`.github/workflows/visual.yml`** — screenshot comparison for the design
+  gallery and every workspace page, pinned to `windows-latest` because the
+  committed Playwright baselines were generated on Windows (font rendering is
+  OS-specific). Regenerate baselines with `npm run test:visual:update` on the
+  same OS after an intentional design change.
 
 ## Production deployment (Docker)
 
@@ -316,14 +347,20 @@ All workspace-scoped endpoints require `Authorization: Bearer <token>` and
 | payments webhook | `POST /api/payments/webhooks/razorpay` — HMAC verified over the raw body *before* parsing, idempotent, unknown events acknowledged-and-ignored | public (outside the JWT chain) |
 | intros | `GET/PUT /api/intros/profile`, `GET /api/intros/suggestions`, `POST /api/intros/requests` (`{targetUserId, reason?}`), `GET /api/intros/requests/incoming|outgoing`, `POST /api/intros/requests/{id}/accept|decline` | any member (accept/decline: target only, server-enforced) |
 | mastermind pods | `POST /api/pods/generate`, `POST /api/pods/publish`, `GET /api/pods`, `GET /api/pods/{id}`, `POST/GET /api/pods/{id}/checkins`, `POST/GET /api/pods/{id}/messages` | generate/publish: admin+; reads: own pods (admins all); check-in & thread: pod members |
-| weekly digest | `GET /api/digest`, `POST /api/digest/build` | admin+; builds are idempotent per (workspace, ISO week) |
-| engagement health | `GET /api/engagement/dashboard`, `POST /api/engagement/refresh`, `POST /api/engagement/members/{userId}/nudge` | owner (DROP/INACTIVE churn signals from the snapshots; nudge goes through the Discord seam) |
+| weekly digest (P12, [PRO]) | `GET /api/digest`, `POST /api/digest/build` | admin+; builds are idempotent per (workspace, ISO week) |
+| engagement health (P12, [PRO]) | `GET /api/engagement/dashboard`, `POST /api/engagement/refresh`, `POST /api/engagement/members/{userId}/nudge` | owner (DROP/INACTIVE churn signals from the snapshots; nudge goes through the Discord seam) |
 | pipeline stages (P8) | `GET /api/pipeline/stages`; `POST`; `PUT /{id}`; `POST /{id}/move` (`{direction: UP\|DOWN}` → full order); `DELETE /{id}` | read: any member; write: admin+ (delete blocked while the stage holds offers; the last column is kept) |
 | pipeline board (P8) | `GET /api/pipeline/board` — columns in stage order, each with its offers | manager+ |
 
 Every Phase 7 endpoint is **[PRO]**: on the free plan it answers `402` with
 `code: PRO_FEATURE_REQUIRED` and a message that names the upgrade, and the UI
 replaces the surface with an upgrade notice linking to `/pricing`.
+
+Phase 12 extends the same gate to the engagement health surface and the weekly
+digest (also `402 PRO_FEATURE_REQUIRED`, with `details.feature` naming
+`engagement health` or `weekly digest`). Their scheduled jobs do not error on a
+below-Pro workspace — they skip it through `PlanLimitService.supportsPro`, so
+no snapshot or digest rows accumulate until the workspace upgrades.
 
 Plan limits (`max_reps`, `max_members`) are enforced in the service layer and
 answer `402` with `code: PLAN_LIMIT_EXCEEDED` and
@@ -533,6 +570,17 @@ and delivered through the existing Discord notifier. Reads are admin+;
 `POST /api/digest/build` renders the current week on demand. Email queues
 behind the same seam once SMTP exists — no paid API dependency anywhere.
 
+**[PRO] (phase 12):** both endpoints answer `402 PRO_FEATURE_REQUIRED` below
+Pro, and the Monday job skips those workspaces instead of building for them.
+
+**Reading it in the app:** the Reports page carries a weekly-digest card that
+renders the latest stored digest — ISO week, generated timestamp and the plain
+body, `white-space: pre-wrap` so the summary keeps its line breaks (no curl,
+no Markdown parsing). The server decides what the card becomes: admin+ gets
+the text, a manager's `403` hides the card, a below-Pro plan shows the upgrade
+line, and `404` explains that the Monday job has not run for this workspace
+yet.
+
 ## Engagement health
 
 A nightly job (02:30, `ENGAGEMENT_CRON`) — or the owner's
@@ -547,6 +595,12 @@ silent for 14+ days (**INACTIVE**), and
 through the `DiscordNotifier` seam with an audit row. Rows are append-only
 per (workspace, member, day), so refreshes and re-fires are no-ops. UI at
 `/engagement`.
+
+**[PRO] (phase 12):** dashboard, refresh and nudge all answer `402
+PRO_FEATURE_REQUIRED` below Pro; the nightly job skips those workspaces. The
+UI swaps the dashboard for an upgrade notice linking to `/pricing` (no data
+queries, no refresh button) and keeps the page header, exactly like
+`/performance`.
 
 ## Database
 
@@ -598,9 +652,10 @@ per (workspace, member, day), so refreshes and re-fires are no-ops. UI at
 | `OfficeHoursTest` | expert gating on every slot/booking surface, booking confirmed only by the verified webhook, cancel/refund state machine with ledger reversals, per-space commission, tenant isolation |
 | `IntrosTest` | tag-overlap ranking with reasons, suggestion cap + duplicate/self refusal, max 3 pending requests, contact revealed only to the accepted pair, cross-workspace isolation |
 | `PodsTest` | deterministic preview == published output (industry + revenue-stage grouping), manual draft overrides + previous-generation archive, check-in membership / one-per-week / streak rules, private-thread privacy (members + admins, tenant-scoped), tenant isolation |
-| `DigestTest` | templated digest rendering with the real facts, one row per (workspace, ISO week), repeat builds return the stored row, admin+ tenant-scoped reads, system-wide cron path works without a tenant context, schedule disabled in tests |
-| `EngagementTest` | weighted 30-day window computed from real activity (audit/check-ins/messages/intros), refresh idempotent per day across the request and job paths, DROP/INACTIVE dashboard signals vs the seeded previous snapshot, owner-only gating, nudge delivered through the `DiscordNotifier` seam + audit row, cross-workspace nudge refused, job bean absent |
-| frontend engagement dashboard | at-risk rows with DROP/INACTIVE pills and the previous score, nudge POST payload + sent confirmation, refresh POST, pre-snapshot empty state |
+| `DigestTest` | templated digest rendering with the real facts, one row per (workspace, ISO week), repeat builds return the stored row, admin+ tenant-scoped reads, system-wide cron path works without a tenant context, schedule disabled in tests, [PRO] gate: 402 on free, cron skips and builds after an upgrade |
+| `EngagementTest` | weighted 30-day window computed from real activity (audit/check-ins/messages/intros), refresh idempotent per day across the request and job paths, DROP/INACTIVE dashboard signals vs the seeded previous snapshot, owner-only gating, nudge delivered through the `DiscordNotifier` seam + audit row, cross-workspace nudge refused, job bean absent, [PRO] gate: 402 on every endpoint, job skips free, works after an upgrade |
+| frontend engagement dashboard | at-risk rows with DROP/INACTIVE pills and the previous score, nudge POST payload + sent confirmation, refresh POST, pre-snapshot empty state, 402 → upgrade notice linking to `/pricing`, 402 mid-session → notice |
+| frontend weekly-digest card | latest digest rendered verbatim on `/reports` (week, timestamp, body), 403 hides the card, 402 shows the upgrade link, 404 explains the first build |
 | frontend community features | office-hours/intros/pods pages against the mocked API: exact request payloads, accept/contact reveal, book & pay flow, meeting link save, check-in body, role-gated generate panel |
 | `Phase8PipelineTest` | default stages ship with every workspace and new offers land in the first column; the board groups offers under their columns in stage order; offer moves follow the manager bar and never cross workspaces (foreign/unknown stage → 404); stage config follows the admin bar — case-insensitive duplicate names → 409, contiguous 1..n positions after reorder/delete, empty-only deletion, last column always kept; stageless offers render in the first column |
 | frontend `src/test/` | roster/offer pages against the mocked API, billing upgrade/plan flows, Discord login + callback, reports rendering, branding/discord settings forms, bench-aging pills, CSV export download, activity feed paging, Phase 6 filters/profile form/suggested-reps panel, Phase 7 PRO gating, role tabs, minor-unit money conversion, payout batching, metric management, Phase 8 board (columns/cards, keyboard move + live-region announcement, stage management panel, rep permission state) |

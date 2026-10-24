@@ -30,6 +30,19 @@ function login() {
   localStorage.setItem('roster.workspace', '1');
 }
 
+const digestBody = {
+  id: 7,
+  weekStart: '2026-10-19',
+  body:
+    'Weekly digest — Acme\n'
+    + 'Week of 2026-10-19\n'
+    + 'Activity: 4 active members · 2 pod check-ins\n'
+    + 'New members: none yet\n'
+    + 'Top contributors: Dana Scott (9)\n'
+    + 'Pipeline: 3 open offers · 1 booking (last 7d) · 0 pending intro requests',
+  generatedAt: '2026-10-19T08:00:00',
+};
+
 const reportsBody = {
   placementRate: { placedReps: 3, totalReps: 5, rate: 0.6 },
   averageBenchDays: 12.5,
@@ -62,6 +75,79 @@ describe('ReportsPage', () => {
     expect(screen.getByText('1/2 placed')).toBeInTheDocument();
     expect(screen.getByText('Sales')).toBeInTheDocument();
     expect(screen.getByText('Uncategorised')).toBeInTheDocument();
+  });
+});
+
+describe('ReportsPage weekly digest card', () => {
+  it('renders the latest stored digest without leaving the app', async () => {
+    login();
+    mockFetch({
+      '/api/reports': { body: reportsBody },
+      '/api/digest': { body: digestBody },
+    });
+    renderPage(<ReportsPage />);
+
+    expect(await screen.findByText('Weekly digest')).toBeInTheDocument();
+    // Meta line: the ISO week the digest covers, plus when it was rendered.
+    expect(await screen.findByText(/generated/)).toBeInTheDocument();
+    // The body is verbatim plain text from the Summarizer seam.
+    expect(screen.getByText(/Activity: 4 active members/)).toBeInTheDocument();
+    expect(screen.getByText(/Top contributors: Dana Scott \(9\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Weekly digest — Acme/)).toBeInTheDocument();
+  });
+
+  it('hides the card from roles that cannot read the digest (403)', async () => {
+    login();
+    mockFetch({
+      '/api/reports': { body: reportsBody },
+      '/api/digest': {
+        status: 403,
+        body: { status: 403, code: 'FORBIDDEN', message: 'admin only' },
+      },
+    });
+    renderPage(<ReportsPage />);
+
+    await screen.findByText('60%');
+    expect(screen.queryByText('Weekly digest')).toBeNull();
+  });
+
+  it('offers the upgrade on a plan below Pro (402)', async () => {
+    login();
+    mockFetch({
+      '/api/reports': { body: reportsBody },
+      '/api/digest': {
+        status: 402,
+        body: {
+          status: 402,
+          code: 'PRO_FEATURE_REQUIRED',
+          message: "Feature 'weekly digest' needs the Pro plan.",
+        },
+      },
+    });
+    renderPage(<ReportsPage />);
+
+    expect(
+      await screen.findByText(/The weekly digest is available on the Pro plan/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute(
+      'href',
+      '/pricing',
+    );
+  });
+
+  it('explains the empty state before the first build (404)', async () => {
+    login();
+    mockFetch({
+      '/api/reports': { body: reportsBody },
+      '/api/digest': {
+        status: 404,
+        body: { status: 404, code: 'NOT_FOUND', message: 'No digest' },
+      },
+    });
+    renderPage(<ReportsPage />);
+
+    expect(await screen.findByText(/No digest yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/Could not load the digest/)).toBeNull();
   });
 });
 

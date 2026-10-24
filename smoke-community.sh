@@ -8,9 +8,12 @@
 # to the backend directly when the frontend is not running):
 #
 #   intros profile (owner + invitee) → invite lifecycle (create, list,
-#   accept, single-use token) → deterministic pod generation (generate
-#   twice, publish the preview) → private pod thread (post, read as member,
-#   refused for an outsider, blank body refused) → workspace cleanup
+#   accept, single-use token) → intro request (suggested by tag overlap,
+#   pending both ways, duplicate refused, non-recipient refused) → accept as
+#   the target → contact reveal for the pair only → decline reveals nothing →
+#   deterministic pod generation (generate twice, publish the preview) →
+#   private pod thread (post, read as member, refused for an outsider, blank
+#   body refused) → workspace cleanup
 #
 # Repeatable by construction: every run uses a fresh timestamped email/slug,
 # so back-to-back runs never collide; cleanup soft-deletes the workspace
@@ -27,6 +30,7 @@ FAIL=0
 TOKEN=""
 MEMBER_TOKEN=""
 WORKSPACE_ID=""
+MEMBER_ID=""
 POD_ID=""
 
 BODY_FILE="$(mktemp)"
@@ -157,12 +161,77 @@ http POST "$BASE/api/invites/accept?token=$INVITE_TOKEN" "" "$MEMBER_TOKEN"
 check "token is single-use (re-accept → 409)" 409 "$HTTP_CODE"
 
 echo "[5] invitee profile (second pod member)"
+http GET "$BASE/api/auth/me" "" "$MEMBER_TOKEN"
+check "invitee identity readable (200)" 200 "$HTTP_CODE"
+MEMBER_ID=$(json_num id "$HTTP_BODY")
+check "invitee login email is the invited address" "$INVITE_EMAIL" "$(json_str email "$HTTP_BODY")"
+[ -n "$MEMBER_ID" ] || abort "could not read the invitee user id"
+
 http PUT "$BASE/api/intros/profile" \
   "{\"industry\":\"SaaS\",\"revenueStage\":\"Series A\",\"offeringTags\":[\"hiring\"],\"lookingForTags\":[\"fundraising\"]}" \
   "$MEMBER_TOKEN" "$WORKSPACE_ID"
 check "invitee profile save (200)" 200 "$HTTP_CODE"
 
-echo "[6] deterministic pod generation + publish"
+echo "[6] intros: request → accept → contact reveal"
+# The two profiles are complementary (owner offers fundraising/looks for
+# hiring; invitee offers hiring/looks for fundraising), so the invitee is
+# already a suggestion for the owner before any request exists.
+http GET "$BASE/api/intros/suggestions" "" "$TOKEN" "$WORKSPACE_ID"
+check "owner gets suggestions (200)" 200 "$HTTP_CODE"
+check_contains "tag overlap suggests the invitee" "$HTTP_BODY" '"displayName":"Community Member"'
+check_contains "every suggestion carries a reason" "$HTTP_BODY" '"reason":"'
+
+http POST "$BASE/api/intros/requests" \
+  "{\"targetUserId\":$MEMBER_ID,\"reason\":\"fundraising intro\"}" "$TOKEN" "$WORKSPACE_ID"
+check "request an intro (201)" 201 "$HTTP_CODE"
+REQUEST_ID=$(json_num id "$HTTP_BODY")
+[ -n "$REQUEST_ID" ] || abort "intro request returned no id"
+check "new request starts pending" "pending" "$(json_str status "$HTTP_BODY")"
+check_contains "no contact before acceptance" "$HTTP_BODY" '"contactEmail":null'
+
+http GET "$BASE/api/intros/requests/outgoing" "" "$TOKEN" "$WORKSPACE_ID"
+check "outgoing lists the request (200)" 200 "$HTTP_CODE"
+check_contains "outgoing names the target" "$HTTP_BODY" '"toName":"Community Member"'
+check_contains "outgoing keeps the contact hidden" "$HTTP_BODY" '"contactEmail":null'
+
+http GET "$BASE/api/intros/requests/incoming" "" "$MEMBER_TOKEN" "$WORKSPACE_ID"
+check "incoming reaches the target (200)" 200 "$HTTP_CODE"
+check_contains "incoming names the requester" "$HTTP_BODY" '"fromName":"Community Owner"'
+OWNER_ID=$(json_num fromUserId "$HTTP_BODY")
+
+# Only the recipient may answer, and a duplicate request is refused while the
+# first one is still pending.
+http POST "$BASE/api/intros/requests/$REQUEST_ID/accept" "" "$TOKEN" "$WORKSPACE_ID"
+check "requester cannot accept their own request (403)" 403 "$HTTP_CODE"
+http POST "$BASE/api/intros/requests" \
+  "{\"targetUserId\":$MEMBER_ID}" "$TOKEN" "$WORKSPACE_ID"
+check "duplicate pending request refused (409)" 409 "$HTTP_CODE"
+
+# Accept as the target: the pair can now see the contact email.
+http POST "$BASE/api/intros/requests/$REQUEST_ID/accept" "" "$MEMBER_TOKEN" "$WORKSPACE_ID"
+check "target accepts (200)" 200 "$HTTP_CODE"
+check "status flips to accepted" "accepted" "$(json_str status "$HTTP_BODY")"
+check "accepting reveals the invitee's login email" "$INVITE_EMAIL" \
+  "$(json_str contactEmail "$HTTP_BODY")"
+
+http GET "$BASE/api/intros/requests/outgoing" "" "$TOKEN" "$WORKSPACE_ID"
+check "requester keeps seeing the revealed contact (200)" 200 "$HTTP_CODE"
+check_contains "revealed contact is the invitee's email" "$HTTP_BODY" \
+  "\"contactEmail\":\"$INVITE_EMAIL\""
+http POST "$BASE/api/intros/requests/$REQUEST_ID/accept" "" "$MEMBER_TOKEN" "$WORKSPACE_ID"
+check "a settled request cannot be accepted twice (409)" 409 "$HTTP_CODE"
+
+# The other direction declines: contact stays hidden.
+http POST "$BASE/api/intros/requests" \
+  "{\"targetUserId\":$OWNER_ID}" "$MEMBER_TOKEN" "$WORKSPACE_ID"
+check "reverse request (201)" 201 "$HTTP_CODE"
+REVERSE_ID=$(json_num id "$HTTP_BODY")
+http POST "$BASE/api/intros/requests/$REVERSE_ID/decline" "" "$TOKEN" "$WORKSPACE_ID"
+check "target declines (200)" 200 "$HTTP_CODE"
+check "status flips to declined" "declined" "$(json_str status "$HTTP_BODY")"
+check_contains "declining reveals no contact" "$HTTP_BODY" '"contactEmail":null'
+
+echo "[7] deterministic pod generation + publish"
 http POST "$BASE/api/pods/generate" "" "$TOKEN" "$WORKSPACE_ID"
 check "generate preview (200)" 200 "$HTTP_CODE"
 GEN1="$HTTP_BODY"
@@ -189,7 +258,7 @@ check "publish writes both members" "2" "$PUB_MEMBERS"
 POD_ID=$(json_num id "$PUB")
 [ -n "$POD_ID" ] || abort "publish returned no pod id"
 
-echo "[7] private pod thread"
+echo "[8] private pod thread"
 MSG="community-smoke-$TS"
 http POST "$BASE/api/pods/$POD_ID/messages" "{\"body\":\"$MSG\"}" "$TOKEN" "$WORKSPACE_ID"
 check "owner posts (200)" 200 "$HTTP_CODE"
@@ -213,5 +282,5 @@ OUTSIDER_TOKEN=$(json_str token "$HTTP_BODY")
 http GET "$BASE/api/pods/$POD_ID/messages" "" "$OUTSIDER_TOKEN" "$WORKSPACE_ID"
 check "non-member reads the private thread (403)" 403 "$HTTP_CODE"
 
-echo "[8] cleanup (also runs when earlier steps failed)"
+echo "[9] cleanup (also runs when earlier steps failed)"
 summary

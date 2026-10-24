@@ -1456,3 +1456,19 @@ export function nudgeEngagementMember(userId: number) {
     method: 'POST',
   });
 }
+
+// ------------------------------------------------------------- weekly digest
+
+export interface Digest {
+  id: number;
+  /** ISO Monday of the week the digest covers. */
+  weekStart: string;
+  /** Plain, pre-wrapped text rendered by the Summarizer. */
+  body: string;
+  generatedAt: string;
+}
+
+/** The workspace's most recent stored digest (404 before the first build). */
+export function getDigest() {
+  return request<Digest>('/api/digest');
+}

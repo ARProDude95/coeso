@@ -20,23 +20,39 @@ service reads the workspace from `TenantContext`, never from the request body.
 | 3 | Smart intros — `member_profiles` (offering / looking-for tags + industry), bidirectional tag-overlap scorer (+20 shared industry), ≤5 suggestions with one-line reason, max 3 pending requests, contact revealed only on accept to the pair, Discord notifications, cross-workspace isolation | `09bbece` | `IntrosTest` (4) |
 | 4 | Mastermind pods — deterministic industry- then revenue-stage-adjacent preview (preview == publish output; `member_profiles.revenue_stage`, V10), manual draft overrides validated against active membership, previous generation archived on republish, private pod reads (members + admins), private message thread (`pod_messages`, V10), weekly wins/blockers/ask check-ins (one per ISO week → 409), consecutive-Monday attendance streaks | `9a7f92b` + V10 commit | `PodsTest` (6) |
 | 5 | Frontend UIs — `/office-hours`, `/intros`, `/pods` pages + nav entries + typed API client, matching existing design (cards, lookup rows, pills, btn classes) | `bfd4f7f` | `community-features.test.tsx` (7) |
-| 6 | Engagement snapshots + churn dashboard (weighted 30-day window, nightly job, DROP/INACTIVE signals, owner-only reads, Discord nudge seam) + templated weekly digest (`Summarizer` seam, `digest_logs`, Mondays 08:00), `/engagement` UI | uncommitted | `EngagementTest` (3), `DigestTest` (4), `engagement.test.tsx` (2) |
+| 6 | Engagement snapshots + churn dashboard (weighted 30-day window, nightly job, DROP/INACTIVE signals, owner-only reads, Discord nudge seam) + templated weekly digest (`Summarizer` seam, `digest_logs`, Mondays 08:00), `/engagement` UI, phase-12 [PRO] gate (402 + upgrade notice, jobs skip free) | uncommitted | `EngagementTest` (4), `DigestTest` (5), `engagement.test.tsx` (4), digest-card cases in `discord-reports.test.tsx` (4) |
 
 **Verification status:**
-- Backend: `mvn test` full suite — **131 tests, 0 failures, 0 errors** (21
+- Backend: `mvn test` full suite — **133 tests, 0 failures, 0 errors** (21
   suites).
-- Frontend: `npm test` — **46 tests, 10 files, clean exit**; `tsc -b` clean.
+- Frontend: `npm test` — **53 tests, 10 files, clean exit**; `tsc -b` clean.
 - Webhook idempotency, tenant isolation, and role gating are asserted in the
   per-feature suites above.
 - Live smokes against the running stack (both repeatable, both exit non-zero
   on failure): `./smoke-test.sh` (register → pipeline board → move → 401/403
-  negatives → cleanup) and `./smoke-community.sh` (intros profile → invite
-  create/list/accept + single-use token → deterministic pod generation +
-  publish → private thread: member read, blank 400, outsider 403 → cleanup;
-  37 asserts, fresh timestamped data per run). `smoke-community.sh` drives
-  the Vite proxy when :5173 is up and falls back to :8080 directly.
-  Verified 2026-10-22: three consecutive runs green (full stack ×2,
-  backend-only fallback ×1).
+  negatives → cleanup; 21 asserts) and `./smoke-community.sh` (intros profile
+  → invite create/list/accept + single-use token → deterministic pod
+  generation + publish → private thread: member read, blank 400, outsider 403
+  → cleanup; 62 asserts incl. the intro request → accept → contact-reveal
+  flow and a decline that reveals nothing, fresh timestamped data per run).
+  `smoke-community.sh` drives the Vite proxy when :5173 is up and falls back
+  to :8080 directly. `./smoke-all.sh` runs both back-to-back and prints one
+  verdict (two-row summary, exit 0 only when both suites pass; a failing
+  suite never stops the other). Verified 2026-10-22: three consecutive runs
+  green (full stack ×2, backend-only fallback ×1). Verified 2026-10-24:
+  `./smoke-all.sh` green twice in a row (2/2 suites, 83/83 asserts) and red
+  with exit 1 when pointed at a dead port (0/2, both suites still ran).
+- CI: `.github/workflows/smoke.yml` (every push / PR / manual) runs both
+  suites against a throwaway stack — MySQL 8 service container, backend jar
+  built from source (`mvn -DskipTests package`), Vite on `:5173` — then
+  `bash smoke-all.sh`; backend/frontend logs upload on failure, and the job's
+  teardown kills the two recorded PIDs rather than matching process names.
+  Verified locally on 2026-10-24 by replaying the same sequence on spare ports
+  (throwaway `roster_ci` database, backend `:8099`, Vite `:5199`): Flyway
+  migrated the empty schema at boot, health went UP, and smoke-all reported
+  2/2 suites / 58/58 asserts — the suite has since gained the intros flow and
+  reports 83/83 on the dev stack. The GitHub runner itself was not exercised
+  here, and the shared dev stack on `:8080`/`:5173` was never touched.
 - Feature 5 live-verified 2026-10-22 against the running stack (through the
   frontend origin): 34/34 checks — refresh → dashboard (a fresh workspace has
   no signals; a seeded yesterday=100 / today=2 + 20d-silent member fires
@@ -55,8 +71,12 @@ service reads the workspace from `TenantContext`, never from the request body.
   nudge seam (`EngagementService`/`EngagementJob`/`EngagementController`,
   `engagement_snapshots` in V11) and the templated weekly digest
   (`DigestService`/`DigestJob`/`DigestController` + `Summarizer`,
-  `digest_logs`); UI at  `/engagement`, README sections written, tests: `EngagementTest` (3),
-  `DigestTest` (4), frontend `engagement.test.tsx` (2). Live-verified against
+  `digest_logs`); UI at `/engagement` plus a read-only weekly-digest card on
+  `/reports`, README sections written, tests: `EngagementTest` (4),
+  `DigestTest` (5), frontend `engagement.test.tsx` (4), `discord-reports.test.tsx`
+  digest-card cases (4). Phase 12 added on top: the [PRO] gate on every
+  engagement/digest endpoint, both jobs skipping below-Pro workspaces, and the
+  `/engagement` upgrade notice. Live-verified against
   the running stack 2026-10-22 (34/34 checks + UI screenshots) — see
   Verification status.
 - **Static preview published to Freebuff Sites** (frontend only — the Spring
@@ -100,14 +120,23 @@ service reads the workspace from `TenantContext`, never from the request body.
   (the only contact field the schema has).
 - **Check-in week** normalizes any date to its ISO Monday; duplicate week →
   409.
-- Feature 5 is deliberately **not [PRO]-gated**: the README/PROGRESS specs
-  never mark the engagement dashboard or the digest [PRO], and features 2–4
-  (office hours, intros, pods) are ungated too. The only hint otherwise is
-  the pre-existing `PlanLimitService` comment "(Phase 7, 12)", written
-  during Phase 7 before this feature existed. If the brief really reserves a
-  PRO "phase 12" for it, gating is a deliberate follow-up (402 on free plans
-  + an upgrade prompt in the UI + the jobs skipping free workspaces), not
-  something to slip in silently.
+- Feature 5 was initially left **ungated**, because the README/PROGRESS specs
+  never mark the engagement dashboard or the digest [PRO] while features 2–4
+  (office hours, intros, pods) are ungated too; the only hint was the
+  pre-existing `PlanLimitService` comment "(Phase 7, 12)". **Phase 12 closed
+  that gap:** `GET /api/engagement/dashboard`, `POST
+  /api/engagement/refresh`, `POST /api/engagement/members/{id}/nudge`, `GET
+  /api/digest` and `POST /api/digest/build` now answer `402
+  PRO_FEATURE_REQUIRED` (`details.feature` = `engagement health` /
+  `weekly digest`) below Pro, the two scheduled jobs **skip** (never fail on)
+  workspaces below Pro via `PlanLimitService.supportsPro`, and `/engagement`
+  swaps the dashboard for an upgrade notice linking to `/pricing`. The digest
+  also gained a read surface: a card on `/reports` renders the latest stored
+  digest verbatim (week, generated timestamp, pre-wrapped body) and degrades to
+  the upgrade line on 402, hides itself on a manager's 403, and explains the
+  empty week on 404.
+  Free workspaces therefore accumulate no snapshot or digest rows until they
+  upgrade — the nightly/Monday run starts filling from that point.
 - Test DB is `roster_test` on local MySQL (Testcontainers is unavailable in
   this environment; `application-test.yml` falls back to `ROSTER_TEST_DB_*`).
   If Flyway validation fails after a botched migration, drop and recreate

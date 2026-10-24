@@ -29,7 +29,9 @@ import org.springframework.context.ApplicationContext;
  *  - the system-wide build the cron calls works without a tenant context and
  *    is idempotent across all active workspaces,
  *  - the schedule itself is disabled in tests (job bean absent) while the
- *    templated Summarizer is asserted directly against a Facts fixture.
+ *    templated Summarizer is asserted directly against a Facts fixture,
+ *  - phase 12: the digest is [PRO] — 402 on the free plan, building after an
+ *    upgrade, and the Monday job skips (never fails on) workspaces below Pro.
  */
 class DigestTest extends IntegrationTest {
 
@@ -43,6 +45,7 @@ class DigestTest extends IntegrationTest {
     void buildRendersStoresAndStaysIdempotent() throws Exception {
         Account owner = register("dg-build");
         long ws = createWorkspace(owner, "Digest Build " + sfx, null);
+        moveToPlan(ws, "pro");
         Account member = register("dg-build-m");
         addMember(ws, member.userId(), WorkspaceRole.MANAGER);
 
@@ -86,6 +89,7 @@ class DigestTest extends IntegrationTest {
     void readsAreAdminGatedAndTenantScoped() throws Exception {
         Account owner = register("dg-role");
         long ws = createWorkspace(owner, "Digest Role " + sfx, null);
+        moveToPlan(ws, "pro");
         Account manager = register("dg-role-m");
         addMember(ws, manager.userId(), WorkspaceRole.MANAGER);
         apiPost(owner, ws, "/api/digest/build", null).andExpect(status().isOk());
@@ -98,6 +102,7 @@ class DigestTest extends IntegrationTest {
         // body it builds names only itself.
         Account other = register("dg-role-b");
         long wsB = createWorkspace(other, "Digest Role B " + sfx, null);
+        moveToPlan(wsB, "pro");
         apiGet(other, wsB, "/api/digest").andExpect(status().isNotFound());
         var bDigest = read(apiPost(other, wsB, "/api/digest/build", null).andReturn());
         assertThat(bDigest.get("body").asText())
@@ -113,6 +118,7 @@ class DigestTest extends IntegrationTest {
     void systemWideBuildIsIdempotentAndJobScheduleIsOffInTests() {
         Account owner = register("dg-all");
         long ws = createWorkspace(owner, "Digest All " + sfx, null);
+        moveToPlan(ws, "pro");
 
         // The cron's entry point: no tenant context on this thread at all.
         digestService.buildAllForActiveWorkspaces();
@@ -129,6 +135,33 @@ class DigestTest extends IntegrationTest {
         // Guard asserted: the schedule is disabled in the test context, so no
         // cron can race these assertions (DigestTest drives the service).
         assertThat(applicationContext.getBeansOfType(DigestJob.class)).isEmpty();
+    }
+
+    @Test
+    void freePlanAnswers402AndTheMondayJobSkipsIt() throws Exception {
+        Account owner = register("dg-pro");
+        long ws = createWorkspace(owner, "Digest Free " + sfx, null); // free plan
+
+        apiGet(owner, ws, "/api/digest")
+                .andExpect(status().isPaymentRequired())
+                .andExpect(jsonPath("$.code").value("PRO_FEATURE_REQUIRED"))
+                .andExpect(jsonPath("$.details.feature").value("weekly digest"))
+                .andExpect(jsonPath("$.details.planRequired").value("pro"));
+        apiPost(owner, ws, "/api/digest/build", null)
+                .andExpect(status().isPaymentRequired())
+                .andExpect(jsonPath("$.code").value("PRO_FEATURE_REQUIRED"));
+
+        // The cron path skips below-Pro workspaces: no digest row, no Discord
+        // delivery, and nothing for the next run to inherit.
+        digestService.buildAllForActiveWorkspaces();
+        assertThat(digestLogs.countByWorkspaceIdAndWeekStart(ws, monday())).isZero();
+
+        // Upgrade unlocks the same surface; the first build is the usual one.
+        moveToPlan(ws, "pro");
+        var built = read(apiPost(owner, ws, "/api/digest/build", null).andReturn());
+        assertThat(built.get("body").asText()).contains("Digest Free " + sfx);
+        assertThat(digestLogs.countByWorkspaceIdAndWeekStart(ws, monday())).isEqualTo(1);
+        apiGet(owner, ws, "/api/digest").andExpect(status().isOk());
     }
 
     @Test

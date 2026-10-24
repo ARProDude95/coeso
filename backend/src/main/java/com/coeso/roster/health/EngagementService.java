@@ -15,6 +15,7 @@ import com.coeso.roster.entity.Workspace;
 import com.coeso.roster.entity.WorkspaceStatus;
 import com.coeso.roster.intros.IntrosRepos.IntroRequestRepository;
 import com.coeso.roster.officehours.OfficeHoursRepos.OfficeHourBookingRepository;
+import com.coeso.roster.plan.PlanLimitService;
 import com.coeso.roster.pods.PodsRepos.PodCheckinRepository;
 import com.coeso.roster.pods.PodsRepos.PodMessageRepository;
 import com.coeso.roster.repo.Repositories.AuditLogRepository;
@@ -69,6 +70,9 @@ public class EngagementService {
 
     private static final Logger log = LoggerFactory.getLogger(EngagementService.class);
 
+    /** Label carried by the 402 PRO_FEATURE_REQUIRED envelope (phase 12). */
+    static final String FEATURE = "engagement health";
+
     // Score weights — documented in V11's column comment and mirrored here.
     static final int W_AUDIT = 1;
     static final int W_CHECKIN = 4;
@@ -113,6 +117,7 @@ public class EngagementService {
     private final IntroRequestRepository introRequests;
     private final OfficeHourBookingRepository bookings;
     private final HealthRepos.EngagementSnapshotRepository snapshots;
+    private final PlanLimitService planLimits;
     private final AuditService audit;
     private final DiscordNotifier notifier;
 
@@ -130,6 +135,7 @@ public class EngagementService {
                              IntroRequestRepository introRequests,
                              OfficeHourBookingRepository bookings,
                              HealthRepos.EngagementSnapshotRepository snapshots,
+                             PlanLimitService planLimits,
                              AuditService audit,
                              DiscordNotifier notifier,
                              @Value("${app.engagement.window-days:30}") int windowDays,
@@ -145,6 +151,7 @@ public class EngagementService {
         this.introRequests = introRequests;
         this.bookings = bookings;
         this.snapshots = snapshots;
+        this.planLimits = planLimits;
         this.audit = audit;
         this.notifier = notifier;
         this.windowDays = windowDays;
@@ -162,7 +169,9 @@ public class EngagementService {
      */
     @PreAuthorize("@roles.hasAtLeast('OWNER')")
     public List<SnapshotView> snapshotNow() {
-        return snapshotWorkspace(TenantContext.requireWorkspaceId(), LocalDate.now());
+        Long ws = TenantContext.requireWorkspaceId();
+        planLimits.assertProFeature(ws, FEATURE);
+        return snapshotWorkspace(ws, LocalDate.now());
     }
 
     /**
@@ -175,7 +184,15 @@ public class EngagementService {
     public int snapshotAllActiveWorkspaces() {
         List<Workspace> active = workspaces.findByStatus(WorkspaceStatus.ACTIVE);
         int done = 0;
+        int skipped = 0;
         for (Workspace workspace : active) {
+            // [PRO] only: free/starter workspaces get no snapshots at all, so
+            // there is nothing to gate if they upgrade later (the dashboard
+            // simply starts filling from that night on).
+            if (!planLimits.supportsPro(workspace.getId())) {
+                skipped++;
+                continue;
+            }
             try {
                 snapshotWorkspace(workspace.getId(), LocalDate.now());
                 done++;
@@ -183,6 +200,10 @@ public class EngagementService {
                 log.warn("Engagement snapshot failed for workspace {}: {}",
                         workspace.getId(), e.toString());
             }
+        }
+        if (skipped > 0) {
+            log.info("Engagement snapshots skipped {} workspace(s) without a [PRO] plan",
+                    skipped);
         }
         return done;
     }
@@ -343,6 +364,7 @@ public class EngagementService {
     @PreAuthorize("@roles.hasAtLeast('OWNER')")
     public DashboardView dashboard() {
         Long ws = TenantContext.requireWorkspaceId();
+        planLimits.assertProFeature(ws, FEATURE);
         LocalDate latest = snapshots.findFirstByWorkspaceIdOrderBySnapshotDateDesc(ws)
                 .map(EngagementSnapshot::getSnapshotDate)
                 .orElse(null);
@@ -388,6 +410,7 @@ public class EngagementService {
     @PreAuthorize("@roles.hasAtLeast('OWNER')")
     public NudgeView nudge(Long userId) {
         Long ws = TenantContext.requireWorkspaceId();
+        planLimits.assertProFeature(ws, FEATURE);
         boolean active = memberships.findByWorkspaceId(ws).stream()
                 .anyMatch(m -> Objects.equals(m.getUserId(), userId));
         if (!active) {

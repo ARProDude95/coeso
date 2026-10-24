@@ -183,6 +183,24 @@ public abstract class IntegrationTest {
         membershipRepository.save(membership);
     }
 
+    /**
+     * Moves the workspace onto another plan (test fixture, no HTTP). New
+     * workspaces start on the free plan, so [PRO] surfaces need this first.
+     */
+    protected void moveToPlan(long workspaceId, String planCode) {
+        tx().executeWithoutResult(s -> {
+            var plan = entityManager
+                    .createQuery("select p from Plan p where p.code = :code",
+                            com.coeso.roster.entity.Plan.class)
+                    .setParameter("code", planCode)
+                    .getSingleResult();
+            var workspace = entityManager.find(com.coeso.roster.entity.Workspace.class,
+                    workspaceId);
+            workspace.setPlan(plan);
+            entityManager.flush();
+        });
+    }
+
     // ------------------------------------------------------------------ requests
 
     protected static String bearer(Account account) {

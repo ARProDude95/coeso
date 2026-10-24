@@ -13,6 +13,7 @@ import com.coeso.roster.entity.Workspace;
 import com.coeso.roster.entity.WorkspaceStatus;
 import com.coeso.roster.intros.IntrosRepos.IntroRequestRepository;
 import com.coeso.roster.officehours.OfficeHoursRepos.OfficeHourBookingRepository;
+import com.coeso.roster.plan.PlanLimitService;
 import com.coeso.roster.pods.PodsRepos.PodCheckinRepository;
 import com.coeso.roster.repo.Repositories.AuditLogRepository;
 import com.coeso.roster.repo.Repositories.MembershipRepository;
@@ -58,6 +59,9 @@ public class DigestService {
 
     private static final Logger log = LoggerFactory.getLogger(DigestService.class);
 
+    /** Label carried by the 402 PRO_FEATURE_REQUIRED envelope (phase 12). */
+    static final String FEATURE = "weekly digest";
+
     /** Bookings counted in the "last 7d" pipeline line. */
     private static final int BOOKING_WINDOW_DAYS = 7;
 
@@ -70,6 +74,7 @@ public class DigestService {
     private final OfficeHourBookingRepository bookings;
     private final UserRepository users;
     private final HealthRepos.DigestLogRepository digestLogs;
+    private final PlanLimitService planLimits;
     private final Summarizer summarizer;
     private final DiscordNotifier notifier;
 
@@ -82,6 +87,7 @@ public class DigestService {
                          OfficeHourBookingRepository bookings,
                          UserRepository users,
                          HealthRepos.DigestLogRepository digestLogs,
+                         PlanLimitService planLimits,
                          Summarizer summarizer,
                          DiscordNotifier notifier) {
         this.workspaces = workspaces;
@@ -93,6 +99,7 @@ public class DigestService {
         this.bookings = bookings;
         this.users = users;
         this.digestLogs = digestLogs;
+        this.planLimits = planLimits;
         this.summarizer = summarizer;
         this.notifier = notifier;
     }
@@ -105,6 +112,7 @@ public class DigestService {
     @PreAuthorize("@roles.hasAtLeast('ADMIN')")
     public DigestView latest() {
         Long ws = TenantContext.requireWorkspaceId();
+        planLimits.assertProFeature(ws, FEATURE);
         DigestLog row = digestLogs.findFirstByWorkspaceIdOrderByWeekStartDesc(ws)
                 .orElseThrow(() -> new NotFoundException(
                         "No digest has been generated for this workspace yet — "
@@ -119,6 +127,7 @@ public class DigestService {
     @PreAuthorize("@roles.hasAtLeast('ADMIN')")
     public DigestView buildNow() {
         Long ws = TenantContext.requireWorkspaceId();
+        planLimits.assertProFeature(ws, FEATURE);
         return view(buildForWorkspace(ws));
     }
 
@@ -133,7 +142,14 @@ public class DigestService {
     public int buildAllForActiveWorkspaces() {
         List<Workspace> active = workspaces.findByStatus(WorkspaceStatus.ACTIVE);
         int done = 0;
+        int skipped = 0;
         for (Workspace workspace : active) {
+            // [PRO] only: a workspace below Pro gets no digest and no Discord
+            // delivery — the gate is the plan, not the workspace's age.
+            if (!planLimits.supportsPro(workspace.getId())) {
+                skipped++;
+                continue;
+            }
             try {
                 buildForWorkspace(workspace.getId());
                 done++;
@@ -141,6 +157,9 @@ public class DigestService {
                 log.warn("Weekly digest failed for workspace {}: {}",
                         workspace.getId(), e.toString());
             }
+        }
+        if (skipped > 0) {
+            log.info("Weekly digest skipped {} workspace(s) without a [PRO] plan", skipped);
         }
         return done;
     }

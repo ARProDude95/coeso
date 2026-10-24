@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  ApiError,
   AuditEntry,
   fetchAuditFeed,
   fetchLeaderboard,
   fetchReports,
+  getDigest,
   isProFeatureError,
   listMetricTypes,
 } from '../api';
@@ -13,7 +15,8 @@ import {
  * Workspace reports: placement rate, average bench time, placements per offer
  * and a per-vertical breakdown — all computed server-side from placements and
  * the audit trail (manager role and above; the API enforces it), plus the
- * recent-activity feed read back from that same audit trail.
+ * latest weekly digest (admin+, [PRO]) and the recent-activity feed read back
+ * from that same audit trail.
  */
 export default function ReportsPage() {
   const { data, isLoading, error } = useQuery({
@@ -106,10 +109,68 @@ export default function ReportsPage() {
         </>
       )}
 
+      <WeeklyDigestCard />
+
       <LeaderboardWidget />
 
       <ActivityFeed />
     </div>
+  );
+}
+
+// ----------------------------------------------------------- weekly digest
+
+/**
+ * The latest stored weekly digest (feature 5), readable without curl.
+ *
+ * Server rules decide what the card can be: admin+ roles get the body, a
+ * manager's 403 hides the card entirely (they never see the link), a below-Pro
+ * plan shows the upgrade line, and 404 means the Monday job has not run for
+ * this workspace yet. The body is pre-formatted plain text, so it is rendered
+ * with `white-space: pre-wrap` rather than parsed as Markdown.
+ */
+function WeeklyDigestCard() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['digest'],
+    queryFn: getDigest,
+    retry: false,
+  });
+
+  if (error instanceof ApiError && error.status === 403) {
+    return null;
+  }
+
+  const proLocked = isProFeatureError(error);
+  const noDigestYet = error instanceof ApiError && error.status === 404;
+
+  return (
+    <section className="settings-section card">
+      <h2>Weekly digest</h2>
+      {isLoading && <p className="muted">Loading…</p>}
+      {proLocked && (
+        <p className="muted">
+          The weekly digest is available on the Pro plan.{' '}
+          <a href="/pricing">Upgrade</a>.
+        </p>
+      )}
+      {noDigestYet && (
+        <p className="muted">
+          No digest yet — the Monday job builds one for every active workspace.
+        </p>
+      )}
+      {error && !proLocked && !noDigestYet && (
+        <p className="error-text">Could not load the digest.</p>
+      )}
+      {data && (
+        <>
+          <p className="muted">
+            Week of {data.weekStart} · generated{' '}
+            {new Date(data.generatedAt).toLocaleString()}
+          </p>
+          <div className="digest-body">{data.body}</div>
+        </>
+      )}
+    </section>
   );
 }
 

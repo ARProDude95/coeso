@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Weekly digest endpoints. Reads are admin+ (the digest names every member's
  * activity, so it sits with the other management summaries); building is also
  * admin+ and idempotent — the same-week second call returns the stored row.
+ * Both are [PRO]: a plan below Pro answers 402 PRO_FEATURE_REQUIRED.
  */
 @RestController
 @RequestMapping("/api/digest")

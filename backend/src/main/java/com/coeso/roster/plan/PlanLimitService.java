@@ -39,6 +39,15 @@ public class PlanLimitService {
             java.util.Set.of("pro", "unlimited");
 
     /**
+     * True when the workspace's plan unlocks [PRO] features. The scheduled
+     * jobs use this to skip workspaces without the plan instead of failing
+     * every run with a 402 that nobody asked for.
+     */
+    public boolean supportsPro(Long workspaceId) {
+        return PRO_PLAN_CODES.contains(planFor(workspaceId).getCode());
+    }
+
+    /**
      * [PRO] feature gate: raises a 402 PRO_FEATURE_REQUIRED envelope with an
      * upgrade message when the workspace's plan is below Pro.
      */
@@ -47,8 +56,7 @@ public class PlanLimitService {
         if (!PRO_PLAN_CODES.contains(plan.getCode())) {
             throw new com.coeso.roster.common.ProFeatureRequiredException(feature,
                     "Feature '" + feature + "' needs the Pro plan, but this workspace is on '"
-                            + plan.getName() + "'. Upgrade to unlock performance, "
-                            + "commissions and payouts.");
+                            + plan.getName() + "'. Upgrade the workspace to unlock it.");
         }
     }
 
