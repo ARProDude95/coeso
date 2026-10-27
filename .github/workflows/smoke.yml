@@ -1,0 +1,146 @@
+name: Smoke suites
+
+# Boots a THROWAWAY stack and runs BOTH live smoke suites against it:
+
+#   MySQL 8 (service container, dies with the job)
+#     → Spring Boot on :8080 (Flyway migrates the empty database on boot)
+#     → Vite dev server on :5173 (same `/api` proxy a browser uses)
+#     → ./smoke-all.sh   (pipeline suite + community suite, one verdict)
+#
+# Nothing here talks to the shared dev stack: the database is a per-job service
+# container, the ports are the runner's own, and no Discord/billing credentials
+# are set, so the notifier and payment seams stay in their no-op modes. The
+# smoke scripts only ever use fresh timestamped accounts and delete the
+# workspace they create.
+#
+# Runs on ubuntu-latest rather than the Windows runner used by visual.yml:
+# these are curl/HTTP assertions with no screenshots, so there is no baseline
+# font rendering to match.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Live-stack smoke (throwaway)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: roster
+          MYSQL_USER: roster
+          MYSQL_PASSWORD: roster
+        ports:
+          - 3306:3306
+        # The job must not start the backend until MySQL accepts connections.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=24
+
+    env:
+      SERVER_PORT: '8080'
+      DB_URL: jdbc:mysql://127.0.0.1:3306/roster?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8
+      DB_USER: roster
+      DB_PASSWORD: roster
+      # Throwaway values: this stack is destroyed with the runner.
+      JWT_SECRET: ci-only-secret-0123456789abcdef0123456789abcdef
+      APP_BASE_URL: http://localhost:5173
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      BACKEND_URL: http://localhost:8080
+      FRONTEND_URL: http://localhost:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the backend jar
+        working-directory: backend
+        run: mvn -B -DskipTests package
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # PIDs are recorded so the teardown step kills exactly these two
+      # processes (never a name pattern, which could match other things).
+      - name: Start the backend
+        run: |
+          nohup java -jar backend/target/roster-backend-*-SNAPSHOT.jar \
+            > backend-ci.log 2>&1 &
+          echo $! > backend-ci.pid
+
+      - name: Start the frontend dev server
+        working-directory: frontend
+        run: |
+          nohup ./node_modules/.bin/vite --port 5173 --strictPort \
+            > ../frontend-ci.log 2>&1 &
+          echo $! > ../frontend-ci.pid
+
+      - name: Wait for the stack to be ready
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8080/actuator/health \
+                | grep -q '"status":"UP"'; then
+              echo "backend healthy after ${i}s"
+              break
+            fi
+            [ "$i" -eq 90 ] && { echo "backend never became healthy"; tail -80 backend-ci.log; exit 1; }
+            sleep 1
+          done
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5173/ | grep -q '<title>Roster'; then
+              echo "frontend serving after ${i}s"
+              break
+            fi
+            [ "$i" -eq 60 ] && { echo "frontend never served the app"; tail -80 frontend-ci.log; exit 1; }
+            sleep 1
+          done
+
+      # The scripts are committed 0644 (they are run with `bash` everywhere),
+      # and the wrapper invokes each suite the same way.
+      - name: Run both smoke suites
+        run: bash smoke-all.sh
+
+      - name: Upload stack logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-stack-logs
+          path: |
+            backend-ci.log
+            frontend-ci.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Stop the stack
+        if: always()
+        run: |
+          for pidfile in backend-ci.pid frontend-ci.pid; do
+            if [ -f "$pidfile" ]; then
+              kill "$(cat "$pidfile")" 2>/dev/null || true
+            fi
+          done
