@@ -299,7 +299,10 @@ export default function RosterPage() {
         <section>
           {isLoading && <p className="muted">Loading reps…</p>}
           {repsPage && repsPage.items.length === 0 && (
-            <div className="empty-state">No reps match the current filters.</div>
+            <div className="empty-state">
+              <div className="empty-title">No matching reps</div>
+              <p>Try adjusting or clearing the filters.</p>
+            </div>
           )}
           <div className="rep-grid">
             {repsPage?.items.map((rep) => (

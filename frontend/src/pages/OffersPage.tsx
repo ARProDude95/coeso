@@ -124,7 +124,10 @@ export default function OffersPage() {
         <section>
           {isLoading && <p className="muted">Loading offers…</p>}
           {offers?.length === 0 && (
-            <div className="empty-state">No offers match the current filters.</div>
+            <div className="empty-state">
+              <div className="empty-title">No matching offers</div>
+              <p>Try adjusting or clearing the filters.</p>
+            </div>
           )}
           <div className="rep-grid">
             {offers?.map((offer) => (
