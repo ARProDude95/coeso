@@ -19,6 +19,7 @@ import OfficeHoursPage from './pages/OfficeHoursPage';
 import IntrosPage from './pages/IntrosPage';
 import PodsPage from './pages/PodsPage';
 import EngagementPage from './pages/EngagementPage';
+import VisualGallery from './visual/VisualGallery';
 
 /**
  * Route guards:
@@ -60,6 +61,8 @@ export default function App() {
   void me; // token check only; /api/auth/me is used by the settings/nav later
   return (
     <Routes>
+      {/* Design/QA surface for visual regression — not linked from the app nav. */}
+      <Route path="/__visual" element={<VisualGallery />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/auth/discord" element={<AuthDiscordPage />} />

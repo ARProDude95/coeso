@@ -1,9 +1,19 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Multi-page: the visual-regression harness (visual.html) is a second
+    // entry alongside the app's index.html so `vite build` emits it too.
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        visual: 'visual.html',
+      },
+    },
+  },
   server: {
     port: 5173,
     // Vite 7 rejects unknown Host headers (DNS-rebinding protection), which
@@ -31,5 +41,8 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
     css: false,
+    // e2e/ holds Playwright specs (run by `npm run test:visual`), not vitest —
+    // its *.spec.ts files must not be collected by the unit runner.
+    exclude: [...configDefaults.exclude, 'e2e/**', '**/playwright.config.ts'],
   },
 });

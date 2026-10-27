@@ -1,0 +1,9 @@
+# Playwright (visual regression)
+# Transient artifacts only. The committed baselines live in
+# e2e/visual.spec.ts-snapshots/ and are NOT ignored; the per-run output dir
+# (actuals + diffs on failure) and the HTML report are.
+e2e/test-results/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

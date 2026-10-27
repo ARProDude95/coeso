@@ -1,0 +1,71 @@
+name: Visual regression
+
+# Screenshot-compares the design gallery (/__visual) and the mocked workspace
+# pages against the committed baselines in
+# frontend/e2e/visual.spec.ts-snapshots/.
+#
+# IMPORTANT — the runner OS must match the OS that generated the baselines.
+# Playwright baselines carry a platform suffix (…-win32.png) because font
+# rendering differs per OS. The committed baselines were generated on Windows,
+# so this job pins windows-latest. If you regenerate the baselines on Linux or
+# macOS (or on a different runner), regenerate them from that same OS with
+# `npm run test:visual:update`, otherwise every shot will mismatch on fonts.
+#
+# On failure the workflow uploads the diff images and the HTML report as
+# artifacts so the exact pixel delta can be reviewed without re-running.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/visual.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/visual.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    name: Screenshot compare (Chromium)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install chromium
+
+      - name: Compare screenshots
+        run: npx playwright test
+
+      - name: Upload diff artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-diffs
+          # On a failed comparison Playwright writes <name>-actual/-expected/
+          # -diff.png into the per-test output dir (e2e/test-results), and the
+          # HTML report renders the side-by-side view.
+          path: |
+            frontend/playwright-report/
+            frontend/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14

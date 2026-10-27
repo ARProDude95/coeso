@@ -1,0 +1,159 @@
+/* Visual-regression gallery (storybook-lite). Scoped to the /__visual route so
+   the app's own pages are untouched. Every block is static and deterministic —
+   no hover/focus/animation states are captured — which is what lets CI
+   byte-compare each section against a committed baseline. */
+
+.visual-page {
+  padding: 1.6rem 1.5rem 3rem;
+  max-width: 1240px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.visual-index {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.visual-index a {
+  display: block;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.visual-index a:hover {
+  border-color: var(--accent-line);
+}
+
+.visual-home {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 40;
+  background: var(--bg-overlay);
+}
+
+/* ------------------------------------------------------------------ stories */
+
+.story {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 1.1rem 1.2rem 1.3rem;
+  margin-bottom: 1.2rem;
+}
+
+.story-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin: 0 0 0.9rem;
+}
+
+.story-body {
+  display: block;
+}
+
+.story-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* A labelled group inside a story (e.g. one pill variant). */
+.story-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.story-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  font-weight: 700;
+}
+
+.story-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+/* Color-token swatches. */
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
+}
+
+.swatch {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.swatch-chip {
+  height: 52px;
+}
+
+.swatch-name {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-overlay);
+  border-top: 1px solid var(--border);
+  word-break: break-all;
+}
+
+/* The real <Modal> paints a position:fixed backdrop relative to the VIEWPORT,
+   which escapes an element screenshot and bleeds over every other story. In the
+   gallery only, re-anchor it to its story box so the dialog is captured in
+   place. The app's own modal is untouched. */
+.story[data-story='modal'] .story-body { position: relative; }
+
+.story[data-story='modal'] .modal-backdrop {
+  position: absolute;
+  inset: 0;
+  padding: 10px;
+  align-items: flex-start;
+  overflow: hidden;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Type ramp specimen. */
+.type-ramp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.type-sample {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.6rem;
+}
+
+.type-meta {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  width: 190px;
+}
