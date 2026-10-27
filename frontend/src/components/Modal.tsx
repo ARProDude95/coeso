@@ -1,15 +1,33 @@
 import { useEffect } from 'react';
 import { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
-/** Generic modal: backdrop click or Escape closes; content is children. */
+/**
+ * Generic modal: backdrop click or Escape closes; content is children.
+ *
+ * Rendered through a portal into document.body so it leaves the page's DOM
+ * tree. That matters because page sections run transform-based entrance
+ * animations (`rise`, fill-mode both — the transform stays applied as an
+ * identity matrix after the animation ends), which makes the section a
+ * containing block for `position: fixed` AND a stacking context: the
+ * backdrop's z-index would be trapped below the sticky topnav and later page
+ * siblings, and the dialog painted *behind* the page. At document.body the
+ * fixed backdrop anchors to the viewport and z-index 50 wins as intended.
+ *
+ * `container` overrides the portal target — the visual gallery passes its
+ * story box so gallery.css can re-anchor the backdrop for element screenshots.
+ */
 export default function Modal({
   title,
   onClose,
   children,
+  container,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Portal target. Defaults to document.body. */
+  container?: HTMLElement | null;
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -21,7 +39,7 @@ export default function Modal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       className="modal-backdrop"
       role="presentation"
@@ -45,6 +63,7 @@ export default function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    container ?? document.body,
   );
 }
