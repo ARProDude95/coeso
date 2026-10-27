@@ -1,0 +1,10 @@
+name = "roster-api"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Local D1 for `wrangler dev` / `wrangler d1 execute --local`.
+# The hosted binding (DB) is injected at deploy time by Freebuff Sites.
+[[d1_databases]]
+binding = "DB"
+database_name = "roster_local"
+database_id = "00000000-0000-0000-0000-000000000000"

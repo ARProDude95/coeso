@@ -32,3 +32,15 @@ roster-export.csv
 /project-id
 /freebuff-sites-build/
 /sites-deploy/
+
+# Worker local secret (never commit)
+worker/.jwt-secret
+worker/.dev.vars
+
+# Worker local build state: wrangler's bundle cache and the Miniflare
+# D1/KV/R2 files behind `wrangler dev` (recreated on next run).
+worker/.wrangler/
+
+# Local JDK/Maven toolchain downloaded for tests
+/.toolchain/
+.sites-secrets/
