@@ -53,6 +53,14 @@ service reads the workspace from `TenantContext`, never from the request body.
   2/2 suites / 58/58 asserts — the suite has since gained the intros flow and
   reports 83/83 on the dev stack. The GitHub runner itself was not exercised
   here, and the shared dev stack on `:8080`/`:5173` was never touched.
+- CI: `.github/workflows/daily-commit.yml` keeps one commit landing on the
+  default branch per day (04:17 UTC `schedule`, plus `workflow_dispatch`): it
+  appends a dated row to `DAILY_LOG.md` and pushes it as
+  `github-actions[bot]`, guarded so a second run on the same day is a no-op.
+  Its two script steps were rehearsed locally on 2026-10-27 against a scratch
+  bare clone — wrote the row, committed as the bot, pushed on attempt 1, and
+  the same-day re-run skipped cleanly — but the scheduled trigger itself has
+  not fired on GitHub yet.
 - Feature 5 live-verified 2026-10-22 against the running stack (through the
   frontend origin): 34/34 checks — refresh → dashboard (a fresh workspace has
   no signals; a seeded yesterday=100 / today=2 + 20d-silent member fires

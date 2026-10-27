@@ -1,0 +1,102 @@
+name: Daily log
+
+# Keeps a commit landing on the default branch every day, including days when
+# nobody touches the code: appends one dated row to DAILY_LOG.md and commits it.
+#
+# Scope: this is a heartbeat log, not a build. It runs no tests and compiles
+# nothing — push events are covered by smoke.yml and visual.yml. To stop the
+# daily commits, delete this file. To write today's entry on demand, run it
+# from the Actions tab (workflow_dispatch).
+
+on:
+  schedule:
+    # 04:17 UTC. Off the hour on purpose: scheduled runs queue behind other
+    # jobs at :00, and GitHub can start them late, so treat the time as a
+    # target rather than a guarantee.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+# The job pushes with the workflow token, which needs write access.
+permissions:
+  contents: write
+
+# Never let two runs race on the same file.
+concurrency:
+  group: daily-log
+  cancel-in-progress: false
+
+jobs:
+  log:
+    name: Append today's entry
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the rebase below needs real ancestry, and the
+          # checkout default (depth 1) makes `git pull --rebase` fail.
+          fetch-depth: 0
+
+      - name: Write the entry
+        run: |
+          set -euo pipefail
+
+          log=DAILY_LOG.md
+          day="$(date -u +%F)"
+
+          if [ ! -f "$log" ]; then
+            cat > "$log" <<'HEADER'
+          # Daily log
+
+          One row per day, appended automatically by
+          [`.github/workflows/daily-commit.yml`](.github/workflows/daily-commit.yml)
+          at 04:17 UTC and committed to the default branch. `HEAD` is the tip of
+          the branch when the row was written and `Files` is the tracked-file
+          count — a quick sanity snapshot, not a changelog (the commit history is).
+
+          | Date (UTC) | HEAD | Files | Latest commit |
+          | --- | --- | --- | --- |
+          HEADER
+          fi
+
+          if grep -q "^| ${day} |" "$log"; then
+            echo "Entry for ${day} already present — nothing to do."
+            exit 0
+          fi
+
+          short="$(git rev-parse --short HEAD)"
+          subject="$(git log -1 --pretty=%s)"
+          files="$(git ls-files | wc -l | tr -d ' ')"
+          printf '| %s | `%s` | %s | %s |\n' "$day" "$short" "$files" "$subject" >> "$log"
+          echo "Wrote: $(tail -1 "$log")"
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+
+          # --porcelain, not `git diff`: on the very first run DAILY_LOG.md is
+          # still untracked and `git diff` reports nothing.
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Nothing changed — skipping the commit."
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add DAILY_LOG.md
+          git commit -m "Daily log $(date -u +%F)"
+
+          # A human push may have landed since checkout; rebase and retry
+          # instead of failing the run.
+          for attempt in 1 2 3; do
+            if git pull --rebase --autostash && git push; then
+              echo "Pushed on attempt ${attempt}."
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed; retrying in 5s…" >&2
+            sleep 5
+          done
+
+          echo "Could not push after 3 attempts." >&2
+          exit 1

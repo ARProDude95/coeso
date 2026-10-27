@@ -163,7 +163,7 @@ npx tsc --noEmit                    # typecheck
 
 ### Continuous integration
 
-Two GitHub Actions workflows, each on its own runner OS:
+Three GitHub Actions workflows:
 
 - **`.github/workflows/smoke.yml`** — every push, pull request and manual
   run: boots a **throwaway** stack (MySQL 8 service container → Spring Boot
@@ -178,6 +178,12 @@ Two GitHub Actions workflows, each on its own runner OS:
   committed Playwright baselines were generated on Windows (font rendering is
   OS-specific). Regenerate baselines with `npm run test:visual:update` on the
   same OS after an intentional design change.
+- **`.github/workflows/daily-commit.yml`** — a heartbeat commit for days when
+  nobody touches the repo: every day at 04:17 UTC (or on demand from the
+  Actions tab) it appends one dated row to `DAILY_LOG.md` — current `HEAD`,
+  tracked-file count, latest commit subject — and pushes it as
+  `github-actions[bot]`. It builds nothing and runs no tests; a second run on
+  the same day is a no-op. Delete the file to stop the daily commits.
 
 ## Production deployment (Docker)
 
