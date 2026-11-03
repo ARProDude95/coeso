@@ -11,7 +11,8 @@ import {
 } from './lib/http.js';
 import { hashPassword, verifyPassword } from './lib/password.js';
 import { signToken } from './lib/jwt.js';
-import { requireRole, requireUser, requireWorkspace } from './lib/tenancy.js';
+import { requireUser, requireWorkspace } from './lib/tenancy.js';
+import { handleCore } from './routes-core.js';
 
 // ------------------------------------------------------------------ helpers
 
@@ -219,169 +220,6 @@ async function branding(request, env) {
   return json({ logoUrl: row.logo_url, accentColor: row.accent_color, customDomain: row.custom_domain });
 }
 
-// ------------------------------------------------------------ reps/offers
-
-async function listReps(request, env) {
-  const userId = await requireUser(request, env);
-  const ctx = await requireWorkspace(request, env, userId);
-  const p = new URL(request.url).searchParams;
-  const where = ['r.workspace_id = ?1', 'r.deleted_at IS NULL'];
-  const binds = [ctx.workspaceId];
-  const add = (clause, value) => {
-    binds.push(value);
-    where.push(clause.replace('?', `?${binds.length}`));
-  };
-  if (p.get('q')) add('(r.name LIKE ? OR r.email LIKE ?)', `%${p.get('q')}%`);
-  if (p.get('verticalId')) add('r.vertical_id = ?', Number(p.get('verticalId')));
-  if (p.get('statusId')) add('r.status_id = ?', Number(p.get('statusId')));
-  if (p.get('experienceId')) add('r.experience_level_id = ?', Number(p.get('experienceId')));
-  if (p.get('placed') === 'true') where.push("pl.id IS NOT NULL");
-  if (p.get('placed') === 'false') where.push("pl.id IS NULL");
-  const whereSql = where.join(' AND ');
-  const size = Math.min(200, Number(p.get('size') || 25));
-  const page = Math.max(0, Number(p.get('page') || 0));
-
-  const totalRow = await env.DB.prepare(
-    `SELECT COUNT(*) AS c FROM reps r
-       LEFT JOIN placements pl ON pl.workspace_id = r.workspace_id AND pl.rep_id = r.id AND pl.status = 'active'
-      WHERE ${whereSql}`,
-  )
-    .bind(...binds)
-    .first();
-
-  const { results } = await env.DB.prepare(
-    `SELECT r.id, r.name, r.email, r.notes, r.joined_date, r.bio, r.timezone, r.hours_per_week, r.available_from,
-            r.vertical_id, v.name AS vertical_name,
-            r.status_id, s.name AS status_name, s.kind AS status_kind,
-            r.experience_level_id, el.name AS experience_level_name,
-            o.title AS offer_title, c.name AS client_name
-       FROM reps r
-       LEFT JOIN verticals v ON v.workspace_id = r.workspace_id AND v.id = r.vertical_id
-       LEFT JOIN rep_statuses s ON s.workspace_id = r.workspace_id AND s.id = r.status_id
-       LEFT JOIN experience_levels el ON el.workspace_id = r.workspace_id AND el.id = r.experience_level_id
-       LEFT JOIN placements pl ON pl.workspace_id = r.workspace_id AND pl.rep_id = r.id AND pl.status = 'active'
-       LEFT JOIN offers o ON o.workspace_id = r.workspace_id AND o.id = pl.offer_id
-       LEFT JOIN clients c ON c.workspace_id = r.workspace_id AND c.id = o.client_id
-      WHERE ${whereSql}
-      ORDER BY r.id LIMIT ?${binds.length + 1} OFFSET ?${binds.length + 2}`,
-  )
-    .bind(...binds, size, page * size)
-    .all();
-
-  const items = results.map((r) => ({
-    id: r.id,
-    name: r.name,
-    email: r.email,
-    verticalId: r.vertical_id,
-    verticalName: r.vertical_name,
-    statusId: r.status_id,
-    statusName: r.status_name,
-    statusKind: r.status_kind ? r.status_kind.toUpperCase() : null,
-    experienceLevelId: r.experience_level_id,
-    experienceLevelName: r.experience_level_name,
-    notes: r.notes,
-    joinedDate: r.joined_date,
-    placed: r.offer_title != null,
-    offerId: null,
-    offerTitle: r.offer_title,
-    clientName: r.client_name,
-    benchDays: null,
-    bio: r.bio,
-    timezone: r.timezone,
-    hoursPerWeek: r.hours_per_week,
-    availableFrom: r.available_from,
-  }));
-  return json({ page, size, total: totalRow.c, items });
-}
-
-async function offerRows(env, ws) {
-  const { results } = await env.DB.prepare(
-    `SELECT o.id, o.client_id, c.name AS client_name, o.vertical_id, v.name AS vertical_name,
-            o.title, o.seats, o.notes, o.status, o.stage_id, st.name AS stage_name,
-            (SELECT COUNT(*) FROM placements pl WHERE pl.workspace_id = o.workspace_id AND pl.offer_id = o.id AND pl.status = 'active') AS filled
-       FROM offers o
-       LEFT JOIN clients c ON c.workspace_id = o.workspace_id AND c.id = o.client_id
-       LEFT JOIN verticals v ON v.workspace_id = o.workspace_id AND v.id = o.vertical_id
-       LEFT JOIN pipeline_stages st ON st.workspace_id = o.workspace_id AND st.id = o.stage_id
-      WHERE o.workspace_id = ?1
-      ORDER BY o.id`,
-  )
-    .bind(ws)
-    .all();
-  const repsByOffer = new Map();
-  const pr = await env.DB.prepare(
-    `SELECT pl.offer_id, pl.rep_id, r.name AS rep_name
-       FROM placements pl JOIN reps r ON r.workspace_id = pl.workspace_id AND r.id = pl.rep_id
-      WHERE pl.workspace_id = ?1 AND pl.status = 'active'`,
-  )
-    .bind(ws)
-    .all();
-  for (const row of pr.results) {
-    if (!repsByOffer.has(row.offer_id)) repsByOffer.set(row.offer_id, []);
-    repsByOffer.get(row.offer_id).push({ repId: row.rep_id, repName: row.rep_name });
-  }
-  return results.map((o) => ({
-    id: o.id,
-    clientId: o.client_id,
-    clientName: o.client_name,
-    verticalId: o.vertical_id,
-    verticalName: o.vertical_name,
-    title: o.title,
-    seats: o.seats,
-    filledSeats: o.filled,
-    notes: o.notes,
-    status: o.status === 'closed' ? 'CLOSED' : 'OPEN',
-    effectiveStatus: o.status === 'closed' ? 'CLOSED' : o.filled >= o.seats ? 'FILLED' : 'OPEN',
-    reps: repsByOffer.get(o.id) || [],
-    stageId: o.stage_id,
-    stageName: o.stage_name,
-  }));
-}
-
-async function listOffers(request, env) {
-  const userId = await requireUser(request, env);
-  const ctx = await requireWorkspace(request, env, userId);
-  return json(await offerRows(env, ctx.workspaceId));
-}
-
-async function listStages(request, env) {
-  const userId = await requireUser(request, env);
-  const ctx = await requireWorkspace(request, env, userId);
-  const { results } = await env.DB.prepare(
-    'SELECT id, name, position FROM pipeline_stages WHERE workspace_id = ?1 ORDER BY position',
-  )
-    .bind(ctx.workspaceId)
-    .all();
-  return json(results);
-}
-
-async function board(request, env) {
-  const userId = await requireUser(request, env);
-  const ctx = await requireWorkspace(request, env, userId);
-  requireRole(ctx, 'manager');
-  const stages = await (async () => {
-    const { results } = await env.DB.prepare(
-      'SELECT id, name, position FROM pipeline_stages WHERE workspace_id = ?1 ORDER BY position',
-    )
-      .bind(ctx.workspaceId)
-      .all();
-    return results;
-  })();
-  const offers = await offerRows(env, ctx.workspaceId);
-  const byStage = new Map();
-  for (const o of offers) {
-    const key = o.stageId ?? stages[0]?.id ?? -1;
-    if (!byStage.has(key)) byStage.set(key, []);
-    byStage.get(key).push(o);
-  }
-  return json(
-    stages.map((s) => ({
-      stage: { id: s.id, name: s.name, position: s.position },
-      offers: byStage.get(s.id) || [],
-    })),
-  );
-}
-
 // ------------------------------------------------------------------ router
 
 /** Dispatch an /api request. Returns a Response or null when unrouted. */
@@ -404,10 +242,9 @@ export async function handleApi(request, env) {
   if (method === 'GET' && path === '/api/stats') return stats(request, env);
   if (method === 'GET' && path === '/api/workspaces/branding') return branding(request, env);
 
-  if (method === 'GET' && path === '/api/reps') return listReps(request, env);
-  if (method === 'GET' && path === '/api/offers') return listOffers(request, env);
-  if (method === 'GET' && path === '/api/pipeline/stages') return listStages(request, env);
-  if (method === 'GET' && path === '/api/pipeline/board') return board(request, env);
 
-  return null; // unrouted
+
+  // Everything else lives in routes-core: reps, clients, offers, placements,
+  // pipeline, reports, audit, activity/performance, billing, community.
+  return handleCore(request, env);
 }

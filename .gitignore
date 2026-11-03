@@ -44,3 +44,6 @@ worker/.wrangler/
 # Local JDK/Maven toolchain downloaded for tests
 /.toolchain/
 .sites-secrets/
+
+# Exported chat transcripts (may contain pasted secrets and private notes)
+.cloud-attachments/
