@@ -9,3 +9,4 @@ count — a quick sanity snapshot, not a changelog (the commit history is).
 | Date (UTC) | HEAD | Files | Latest commit |
 | --- | --- | --- | --- |
 | 2026-11-04 | `96ef7d4` | 327 | Serve the full core and community API from the Worker |
+| 2026-11-05 | `a1a5580` | 328 | Daily log 2026-11-04 |
