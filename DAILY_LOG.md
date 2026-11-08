@@ -12,3 +12,4 @@ count — a quick sanity snapshot, not a changelog (the commit history is).
 | 2026-11-05 | `a1a5580` | 328 | Daily log 2026-11-04 |
 | 2026-11-06 | `604f2f1` | 328 | Daily log 2026-11-05 |
 | 2026-11-07 | `628754c` | 328 | Daily log 2026-11-06 |
+| 2026-11-08 | `73ea63f` | 328 | Daily log 2026-11-07 |
