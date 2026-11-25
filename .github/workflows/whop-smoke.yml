@@ -1,0 +1,196 @@
+name: Whop sandbox smoke
+
+# Runs the end-to-end smoke test from scripts/whop-smoke.ts:
+#   checkout (when keys are configured) -> signed webhook -> duplicate replay
+#   -> billing page.
+#
+# By default the job starts its own disposable instance on the runner with a
+# fresh local D1 database (wrangler.ci.jsonc); nothing survives the job. A
+# manual run can instead target an already-running sandbox deployment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "Optional running sandbox app URL (blank starts a disposable local instance)"
+        required: false
+        type: string
+      plan:
+        description: "Plan to exercise"
+        required: false
+        default: "pro_monthly"
+        type: choice
+        options:
+          - pro_monthly
+          - pro_annual
+          - elite_monthly
+          - elite_annual
+          - pro_founding
+          - elite_founding
+  schedule:
+    # Every Monday at 06:17 UTC, so SDK/API drift is noticed even with no pushes.
+    - cron: "17 6 * * 1"
+  push:
+    branches: [main, master]
+    paths:
+      - "src/lib/pricing.ts"
+      - "src/lib/subscriptions.ts"
+      - "src/lib/billing-schema.ts"
+      - "src/lib/whop.ts"
+      - "src/lib/whop-events.ts"
+      - "src/lib/whop-handler.ts"
+      - "src/app/api/webhooks/whop/**"
+      - "src/app/api/billing/**"
+      - "src/app/billing/**"
+      - "scripts/whop-smoke.ts"
+      - "wrangler.ci.jsonc"
+      - "next.config.ts"
+      - "db/schema.sql"
+      - "src/lib/d1.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/whop-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whop-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  NEXT_WRANGLER_CONFIG: ./wrangler.ci.jsonc
+  NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+  # The script refuses a non-sandbox checkout unless --allow-production is
+  # passed, which this workflow never does.
+  WHOP_API_BASE_URL: https://sandbox-api.whop.com/api/v1
+  # Credentials are scoped to the steps that need them, not the whole job:
+  # `npm ci` runs dependency install scripts and must not see any Whop key.
+  WHOP_ACCOUNT_ID: ${{ secrets.WHOP_ACCOUNT_ID }}
+  WHOP_PLAN_ID_PRO_MONTHLY: ${{ secrets.WHOP_PLAN_ID_PRO_MONTHLY }}
+  WHOP_PLAN_ID_PRO_ANNUAL: ${{ secrets.WHOP_PLAN_ID_PRO_ANNUAL }}
+  WHOP_PLAN_ID_ELITE_MONTHLY: ${{ secrets.WHOP_PLAN_ID_ELITE_MONTHLY }}
+  WHOP_PLAN_ID_ELITE_ANNUAL: ${{ secrets.WHOP_PLAN_ID_ELITE_ANNUAL }}
+  WHOP_PLAN_ID_PRO_FOUNDING: ${{ secrets.WHOP_PLAN_ID_PRO_FOUNDING }}
+  WHOP_PLAN_ID_ELITE_FOUNDING: ${{ secrets.WHOP_PLAN_ID_ELITE_FOUNDING }}
+
+jobs:
+  smoke:
+    name: Whop smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Check sandbox secrets
+        id: preflight
+        env:
+          PLAN_KEY: ${{ inputs.plan || 'pro_monthly' }}
+          APP_URL_INPUT: ${{ inputs.app_url || '' }}
+          WEBHOOK_SECRET: ${{ secrets.WHOP_WEBHOOK_SECRET }}
+          API_KEY: ${{ secrets.WHOP_API_KEY }}
+        run: |
+          set -euo pipefail
+          plan_env="WHOP_PLAN_ID_$(echo "$PLAN_KEY" | tr '[:lower:]' '[:upper:]')"
+          plan_id="${!plan_env:-}"
+
+          missing=()
+          [ -z "$WEBHOOK_SECRET" ] && missing+=("WHOP_WEBHOOK_SECRET")
+          [ -z "$plan_id" ] && missing+=("$plan_env")
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "::error::Missing ${missing[*]}. Add the Whop sandbox secrets listed in README.md."
+              exit 1
+            fi
+            echo "::warning::Missing ${missing[*]}; skipping the Whop smoke test."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Checkout needs the API key; without it the job still covers the
+          # signed webhook and the billing page.
+          if [ -n "$API_KEY" ]; then
+            echo "checkout=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "checkout=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -n "$APP_URL_INPUT" ]; then
+            echo "target=remote" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=local" >> "$GITHUB_OUTPUT"
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Generate disposable session secret
+        if: steps.preflight.outputs.ready == 'true'
+        run: echo "SESSION_SECRET=$(openssl rand -hex 48)" >> "$GITHUB_ENV"
+
+      - name: Start disposable sandbox instance
+        if: steps.preflight.outputs.ready == 'true' && steps.preflight.outputs.target == 'local'
+        env:
+          WHOP_WEBHOOK_SECRET: ${{ secrets.WHOP_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          # Fresh runner + fresh local D1: the database disappears with the job.
+          nohup npx next dev --webpack -p 3000 > whop-smoke-app.log 2>&1 &
+          echo $! > /tmp/whop-app.pid
+
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:3000/pricing >/dev/null 2>&1; then
+              echo "app ready after $((attempt * 2))s"
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/whop-app.pid)" 2>/dev/null; then
+              echo "app process exited before becoming ready"
+              break
+            fi
+            sleep 2
+          done
+
+          echo "::error::Disposable app did not become ready"
+          tail -n 100 whop-smoke-app.log || true
+          exit 1
+
+      - name: Run smoke test
+        if: steps.preflight.outputs.ready == 'true'
+        env:
+          APP_URL: ${{ inputs.app_url || 'http://127.0.0.1:3000' }}
+          PLAN_KEY: ${{ inputs.plan || 'pro_monthly' }}
+          WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
+          WHOP_WEBHOOK_SECRET: ${{ secrets.WHOP_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          args=(--create-user --base-url "$APP_URL" --plan "$PLAN_KEY")
+          if [ "${{ steps.preflight.outputs.checkout }}" != "true" ]; then
+            echo "::warning::WHOP_API_KEY is not set; replaying the signed webhook without creating a checkout."
+            args+=(--skip-checkout)
+          fi
+
+          npx tsx scripts/whop-smoke.ts "${args[@]}"
+
+      - name: Stop disposable instance
+        if: always()
+        run: |
+          if [ -f /tmp/whop-app.pid ]; then
+            kill "$(cat /tmp/whop-app.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload app log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whop-smoke-app-log
+          path: whop-smoke-app.log
+          if-no-files-found: ignore

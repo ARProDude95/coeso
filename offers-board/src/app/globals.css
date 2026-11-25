@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0a0b0d;
+  --color-coal: #121418;
+  --color-line: #24272d;
+  --color-paper: #f3efe6;
+  --color-mute: #979eaa;
+  --color-ember: #ff5a1f;
+  --font-display: ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-ember);
+  color: var(--color-ink);
+}
+
+/* --- small primitives shared across the few pages ------------------- */
+
+.card {
+  border: 1px solid var(--color-line);
+  background: var(--color-coal);
+  border-radius: 14px;
+}
+
+.field {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  background: #0b0d10;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--color-paper);
+}
+
+.field:focus {
+  outline: 2px solid color-mix(in srgb, var(--color-ember) 55%, transparent);
+  outline-offset: 1px;
+  border-color: var(--color-ember);
+}
+
+.label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-mute);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  background: transparent;
+  padding: 0.7rem 1.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-paper);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.btn:hover {
+  border-color: #3a3f47;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-ember);
+  border-color: var(--color-ember);
+  color: var(--color-ink);
+}
+
+.btn-primary:hover {
+  background: #ff6f3a;
+  border-color: #ff6f3a;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-mute);
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.pill:hover {
+  color: var(--color-paper);
+  border-color: #3a3f47;
+}
+
+.pill-active,
+.pill-active:hover {
+  background: var(--color-ember);
+  border-color: var(--color-ember);
+  color: var(--color-ink);
+}

@@ -1,0 +1,327 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * Palette lifted from The Roster by Coeso so the two Coeso apps read
+ * as one family: espresso surfaces, cream text, antique-gold accent.
+ * ------------------------------------------------------------------ */
+:root {
+  --background: #100d0a;
+  --foreground: #f2ebdd;
+  --panel: #1a1510;
+  --panel-raised: #211a14;
+  --panel-border: #2e251c;
+  --border-strong: #40331f;
+  --surface-hover: #2a2118;
+  --surface-input: #0e0b08;
+  --muted: #ab9d88;
+  --faint: #7a6d5a;
+  --accent: #d2a95f;
+  --accent-strong: #e8c584;
+  --accent-ink: #241a0b;
+  --danger: #e08078;
+  --success: #97c981;
+  --info: #86b3d4;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-border: var(--panel-border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Serif display face for headings, as on The Roster. */
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua",
+    Palatino, Georgia, "Times New Roman", serif;
+
+  /* Neutrals: The Roster's warm cream-to-espresso ramp replaces zinc. */
+  --color-zinc-50: #f7f1e6;
+  --color-zinc-100: #f2ebdd;
+  --color-zinc-200: #e3d9c4;
+  --color-zinc-300: #cfc0a4;
+  --color-zinc-400: #ab9d88;
+  --color-zinc-500: #958770;
+  --color-zinc-600: #7a6d5a;
+  --color-zinc-700: #57493a;
+  --color-zinc-800: #2e251c;
+  --color-zinc-900: #1a1510;
+  --color-zinc-950: #100d0a;
+
+  /* Accent: antique gold in place of indigo. */
+  --color-indigo-200: #f5e0b5;
+  --color-indigo-300: #e8c584;
+  --color-indigo-400: #d2a95f;
+  --color-indigo-500: #c39a4e;
+  --color-indigo-600: #9c7531;
+
+  /* Status colours use The Roster's muted red / green. */
+  --color-red-200: #f4c4be;
+  --color-red-300: #e08078;
+  --color-red-900: #4a2521;
+  --color-red-950: #2a1614;
+  --color-emerald-300: #b8dfa4;
+  --color-emerald-400: #97c981;
+  --color-emerald-900: #24331c;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(
+      900px 520px at 88% -12%,
+      color-mix(in srgb, var(--accent) 10%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      700px 480px at -8% 108%,
+      rgba(120, 96, 64, 0.09),
+      transparent 60%
+    );
+  background-attachment: fixed;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--foreground);
+}
+
+/* --- Shared component classes -------------------------------------- */
+
+.panel {
+  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+  border: 1px solid var(--panel-border);
+  border-radius: 0.6875rem; /* 11px — The Roster's radius */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.4375rem; /* 7px */
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  transition:
+    background 0.16s var(--ease, ease),
+    border-color 0.16s var(--ease, ease),
+    color 0.16s var(--ease, ease),
+    opacity 0.16s var(--ease, ease);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f0d196, var(--accent-strong));
+}
+
+.btn-secondary {
+  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+  color: var(--foreground);
+  border: 1px solid var(--panel-border);
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
+  color: #f4c4be;
+}
+
+.btn-success {
+  background: transparent;
+  color: var(--success);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+}
+.btn-success:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success) 13%, transparent);
+  color: #b8dfa4;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  background: var(--surface-input);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.4375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--foreground);
+  transition: border-color 0.16s var(--ease, ease);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--faint);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Search fields carry an inline icon at left:3 (12–28px). The unlayered
+   .input padding above outranks Tailwind's layered pl-9 utility, so the icon
+   inset has to live here — same pattern as .select's padding-right. */
+.input-search {
+  padding-left: 2.25rem;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.select {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ab9d88' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1rem;
+}
+
+.label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #e3d9c4;
+  margin-bottom: 0.375rem;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.field-error {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-top: 0.25rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--muted);
+}
+
+.badge-open,
+.badge-accepted {
+  background: color-mix(in srgb, var(--success) 13%, transparent);
+  color: #b8dfa4;
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+}
+.badge-paused {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: #ecd3a2;
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.badge-closed {
+  background: var(--surface-hover);
+  color: var(--muted);
+  border-color: var(--border-strong);
+}
+.badge-pending {
+  background: color-mix(in srgb, var(--info) 13%, transparent);
+  color: #bcd7ea;
+  border-color: color-mix(in srgb, var(--info) 40%, transparent);
+}
+.badge-rejected {
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
+  color: #f4c4be;
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.badge-neutral {
+  background: var(--surface-hover);
+  color: #e3d9c4;
+  border-color: var(--border-strong);
+}
+.badge-verified {
+  background: color-mix(in srgb, var(--info) 15%, transparent);
+  color: #cfe4f3;
+  border-color: color-mix(in srgb, var(--info) 45%, transparent);
+}
+.badge-accent,
+.badge-featured {
+  background: linear-gradient(
+    150deg,
+    var(--accent-strong),
+    var(--accent)
+  );
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--panel) 25%,
+    var(--surface-hover) 50%,
+    var(--panel) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

@@ -1,0 +1,22 @@
+// Minimal bindings for disposable local runs (CI, quick checks).
+//
+// Unlike freebuff.wrangler.jsonc this has no Worker entrypoint or assets — it
+// exists only for initOpenNextCloudflareForDev, which gives `next dev` its D1
+// binding. Point at it with:
+//
+//   NEXT_WRANGLER_CONFIG=./wrangler.ci.jsonc npm run dev
+//
+// The local database is created fresh under .wrangler/state, so a CI runner
+// starts empty and is thrown away with the job.
+{
+  "name": "coeso-offers-board-ci",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "coeso-offers-board-ci",
+      "database_id": "00000000-0000-0000-0000-000000000002"
+    }
+  ]
+}
