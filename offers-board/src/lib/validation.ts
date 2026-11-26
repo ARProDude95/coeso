@@ -55,6 +55,10 @@ export const accountInput = z.object({
   role: z.enum(["admin", "viewer"]).default("viewer"),
 });
 
+export const applicationStatusInput = z.object({
+  status: z.enum(["new", "reviewing", "shortlisted", "hired"]),
+});
+
 export type OfferInput = z.infer<typeof offerInput>;
 export type ApplicationInput = z.infer<typeof applicationInput>;
 export type MemberApplicationInput = z.infer<typeof memberApplicationInput>;

@@ -189,7 +189,6 @@ export default async function AdminPage() {
                   <th className="px-4 py-3">Hours / wk</th>
                   <th className="px-4 py-3">Received</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -224,17 +223,6 @@ export default async function AdminPage() {
                       {formatDate(application.created_at)}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={
-                          application.status === "new"
-                            ? "text-ember"
-                            : "text-mute"
-                        }
-                      >
-                        {application.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
                       <ApplicationStatus
                         id={application.id}
                         status={application.status}

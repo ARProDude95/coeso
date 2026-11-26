@@ -37,6 +37,9 @@ export default async function RootLayout({
                   <Link href="/offers" className="hover:text-paper">
                     Board
                   </Link>
+                  <Link href="/applications" className="hover:text-paper">
+                    My applications
+                  </Link>
                   {session.role === "admin" ? (
                     <Link href="/admin" className="hover:text-paper">
                       Admin

@@ -586,3 +586,32 @@ flag until feature 8 added real Whop subscriptions.
   hint in `/admin` and still answer `201` on apply with no webhook set. The
   real Discord delivery has not been exercised because `DISCORD_WEBHOOK_URL`
   is not yet set on the site.
+
+### Offers Board — application lifecycle and member tracking ✅
+
+- **Why:** applications went "received → nothing". Members had no feedback, and a
+  hired role still sat on the board collecting applicants.
+- **Statuses:** `new` → `reviewing` → `shortlisted` → `hired`, replacing the old
+  two-state `new` / `reviewed` flag. Existing `reviewed` rows are migrated to
+  `reviewing` on boot, and `PATCH /api/applications/[id]` validates against the
+  enum (a legacy `reviewed` value now answers `400`).
+- **Hired closes the offer:** the PATCH handler reads the application's
+  `offer_id` and sets that offer to `closed` in the same request, returning
+  `offerClosed: true`. A later application to the closed offer answers `409`.
+- **Admin UI:** the status cell on `/admin` is a four-way select per
+  application, showing "offer closed" once hired, with an inline error if the
+  save fails. The redundant status text column and the old toggle are gone.
+- **Member UI:** new `/applications` page (session-gated, redirects to `/login`
+  when signed out) listing the member's own applications newest-first with a
+  step tracker and a plain-language hint per state, plus a link to the offer.
+  `listApplicationsForAccount` filters by the session's account id, so one
+  member never sees another's rows. Header gained a "My applications" link.
+- **Checks:** typecheck clean. Local workerd end-to-end: anonymous
+  `/applications` → 307; member PATCH → 401; `reviewed` → 400; the three
+  transitions → 200; `hired` → `{offerClosed: true}`; member page showed their
+  own "Hired" row, did not contain the other member's offer, and linked the
+  right offer; applying to the auto-closed offer → 409; `/admin` rendered the
+  per-row select. Production deploy succeeded and verifies: `/login` 200,
+  anonymous `/applications` → 307, admin login 200, `/admin` 200 with the "My
+  applications" nav link (production has no applications yet, so the select
+  column has nothing to render). Preview carries the same build.

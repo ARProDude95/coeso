@@ -18,17 +18,22 @@ export interface Offer {
   created_at: string;
 }
 
+export type ApplicationStatus = "new" | "reviewing" | "shortlisted" | "hired";
+
 export interface Application {
   id: string;
   offer_id: string;
   offer_title?: string;
+  offer_company?: string;
+  offer_status?: "open" | "closed";
+  offer_commission?: string;
   name: string;
   email: string;
   discord: string;
   experience: string;
   availability_hours: number;
   message: string;
-  status: "new" | "reviewed";
+  status: ApplicationStatus;
   account_id: string | null;
   account_username: string;
   created_at: string;
@@ -261,6 +266,11 @@ async function migrate(db: Db): Promise<void> {
       if (!message.includes("duplicate column")) throw error;
     }
   }
+
+  // The old two-state flag becomes the first step of the new lifecycle.
+  await db.query(
+    "UPDATE applications SET status = 'reviewing' WHERE status = 'reviewed'",
+  );
 }
 
 /**
@@ -469,9 +479,39 @@ export async function hasAppliedForOffer(
   return result.rows.length > 0;
 }
 
+export async function getApplication(
+  id: string,
+): Promise<Application | null> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query("SELECT * FROM applications WHERE id = ?", [
+    id,
+  ]);
+  return (result.rows[0] as unknown as Application) ?? null;
+}
+
+/** A member's own applications, with the offer they belong to. */
+export async function listApplicationsForAccount(
+  accountId: string,
+): Promise<Application[]> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    `SELECT a.*, o.title AS offer_title, o.company AS offer_company,
+            o.status AS offer_status, o.commission AS offer_commission
+       FROM applications a
+       JOIN offers o ON o.id = a.offer_id
+      WHERE a.account_id = ?
+      ORDER BY a.created_at DESC
+      LIMIT 100`,
+    [accountId],
+  );
+  return result.rows as unknown as Application[];
+}
+
 export async function setApplicationStatus(
   id: string,
-  status: Application["status"],
+  status: ApplicationStatus,
 ): Promise<boolean> {
   await ensureReady();
   const db = await getDb();
