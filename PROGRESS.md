@@ -463,3 +463,34 @@ flag until feature 8 added real Whop subscriptions.
   "both"-role search should *not* match a setter-only offer; a keyword-mismatch
   case was overriding the offer's keywords instead of its text) — corrected the
   tests, not the code.
+
+### Offers Board — invite-only access and admin dashboard ✅
+
+- **Model:** the standalone `offers-board/` project no longer has a public
+  board or a single shared admin password. There is one owner admin account
+  plus view-only member accounts the admin creates; there is no sign-up.
+- **Schema:** `accounts` (unique case-insensitive username, scrypt hash, role
+  `admin`/`viewer`, active flag, last_login_at). The owner admin is seeded once
+  from `ADMIN_USERNAME`/`ADMIN_PASSWORD`; later env changes do not reset it.
+- **Sessions:** HMAC-signed `coeso_offers_session` cookie (httpOnly,
+  SameSite=Lax, 7 days), verified against the account row on every request, so
+  disabling or deleting an account revokes access immediately.
+- **Gate:** `/offers` and `/offers/[id]` live behind a layout that redirects to
+  `/login`; reads require a session; every write requires `role = admin`.
+- **Login copy:** states access is invite-only and asks people to contact
+  Coeso's Owner (`a1rymn`) on Discord, with a second notice for offer owners
+  who want their offers posted.
+- **Admin dashboard (`/admin`):** stats, post offer, offers table (edit,
+  close/reopen, delete), account manager (create with one-time password, reset
+  password, disable/enable, delete, last-admin and self guards), applications.
+- **Removed:** `/offers/admin`, `/api/admin/*`, the password-only login, and the
+  public application form (members are view-only).
+- **Bug fixed:** `node:sqlite` returns null-prototype rows, which React refuses
+  to pass to a Client Component (`/admin` 500). Rows are now copied to plain
+  objects in `lib/db.ts`.
+- **Checks:** typecheck + build clean; 20 HTTP checks against `next dev`:
+  anonymous redirect, login page copy, admin login, viewer login, viewer
+  blocked from `/admin` and every write API, admin offer create/edit/
+  close/reopen/delete, account create/reset/disable/delete, old password
+  rejected after reset, disabled session redirected, self-delete/disable
+  guarded.

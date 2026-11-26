@@ -49,10 +49,12 @@ function local(): Db {
     async query(sql, params = []) {
       const statement = database.prepare(sql);
       if (/^\s*(select|with|pragma)\b/i.test(sql)) {
-        return {
-          rows: statement.all(...params) as Record<string, unknown>[],
-          changes: 0,
-        };
+        // node:sqlite rows have a null prototype, which React refuses to pass
+        // from a Server Component to a Client Component — copy them plain.
+        const rows = statement
+          .all(...params)
+          .map((row) => ({ ...(row as Record<string, unknown>) }));
+        return { rows, changes: 0 };
       }
       const info = statement.run(...params);
       return { rows: [], changes: Number(info.changes) };

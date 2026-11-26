@@ -1,4 +1,5 @@
-import { getDb, type SqlValue } from "./db";
+import { getDb, type Db, type SqlValue } from "./db";
+import { hashPassword } from "./password";
 import type { ApplicationInput, OfferInput } from "./validation";
 
 export type RoleType = "setter" | "closer" | "both";
@@ -29,6 +30,19 @@ export interface Application {
   message: string;
   status: "new" | "reviewed";
   created_at: string;
+}
+
+export interface Account {
+  id: string;
+  username: string;
+  role: "admin" | "viewer";
+  active: number;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface AccountWithPassword extends Account {
+  password_hash: string;
 }
 
 export interface BoardStats {
@@ -66,6 +80,16 @@ const SCHEMA = [
      created_at         TEXT NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS applications_offer_idx ON applications (offer_id)`,
+  `CREATE TABLE IF NOT EXISTS accounts (
+     id            TEXT PRIMARY KEY,
+     username      TEXT NOT NULL,
+     password_hash TEXT NOT NULL,
+     role          TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'viewer')),
+     active        INTEGER NOT NULL DEFAULT 1,
+     created_at    TEXT NOT NULL,
+     last_login_at TEXT
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS accounts_username_idx ON accounts (lower(username))`,
 ];
 
 const DEMO_OFFERS: Array<{
@@ -172,6 +196,8 @@ async function bootstrap(): Promise<void> {
     await db.query(statement);
   }
 
+  await seedAdmin(db);
+
   if (process.env.SEED_DEMO_DATA === "false") return;
 
   const count = await db.query("SELECT COUNT(*) AS count FROM offers");
@@ -197,6 +223,33 @@ async function bootstrap(): Promise<void> {
       ],
     );
   }
+}
+
+/**
+ * The owner's admin account comes from the environment. It is only created
+ * once: after that, passwords live (hashed) in the database, so rotating
+ * ADMIN_PASSWORD in hosting does not silently reset the live credentials.
+ */
+async function seedAdmin(db: Db): Promise<void> {
+  const admins = await db.query(
+    "SELECT COUNT(*) AS count FROM accounts WHERE role = 'admin'",
+  );
+  if (Number(admins.rows[0]?.count ?? 0) > 0) return;
+
+  const password = process.env.ADMIN_PASSWORD?.trim();
+  if (!password) return;
+
+  const username = process.env.ADMIN_USERNAME?.trim() || "admin";
+  await db.query(
+    `INSERT INTO accounts (id, username, password_hash, role, active, created_at)
+     VALUES (?, ?, ?, 'admin', 1, ?)`,
+    [
+      crypto.randomUUID(),
+      username,
+      hashPassword(password),
+      new Date().toISOString(),
+    ],
+  );
 }
 
 /* ------------------------------ offers ------------------------------ */
@@ -270,6 +323,40 @@ export async function createOffer(input: OfferInput): Promise<Offer> {
   return created;
 }
 
+export async function updateOffer(
+  id: string,
+  input: OfferInput,
+): Promise<Offer | null> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    `UPDATE offers
+        SET title = ?, company = ?, role_type = ?, commission = ?,
+            pay_type = ?, description = ?, requirements = ?, featured = ?
+      WHERE id = ?`,
+    [
+      input.title,
+      input.company,
+      input.role_type,
+      input.commission,
+      input.pay_type,
+      input.description,
+      input.requirements,
+      input.featured ? 1 : 0,
+      id,
+    ],
+  );
+  if (result.changes === 0) return null;
+  return getOffer(id);
+}
+
+export async function deleteOffer(id: string): Promise<boolean> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query("DELETE FROM offers WHERE id = ?", [id]);
+  return result.changes > 0;
+}
+
 export async function setOfferStatus(
   id: string,
   status: Offer["status"],
@@ -335,6 +422,119 @@ export async function listApplications(): Promise<Application[]> {
       LIMIT 300`,
   );
   return result.rows as unknown as Application[];
+}
+
+/* ----------------------------- accounts ----------------------------- */
+
+export async function listAccounts(): Promise<Account[]> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    `SELECT id, username, role, active, created_at, last_login_at
+       FROM accounts
+      ORDER BY role = 'admin' DESC, lower(username) ASC`,
+  );
+  return result.rows as unknown as Account[];
+}
+
+export async function getAccountById(id: string): Promise<Account | null> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    `SELECT id, username, role, active, created_at, last_login_at
+       FROM accounts WHERE id = ?`,
+    [id],
+  );
+  return (result.rows[0] as unknown as Account) ?? null;
+}
+
+export async function getAccountCredentials(
+  username: string,
+): Promise<AccountWithPassword | null> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "SELECT * FROM accounts WHERE lower(username) = lower(?)",
+    [username.trim()],
+  );
+  return (result.rows[0] as unknown as AccountWithPassword) ?? null;
+}
+
+export async function createAccount(input: {
+  username: string;
+  password: string;
+  role: Account["role"];
+}): Promise<Account> {
+  await ensureReady();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+
+  await db.query(
+    `INSERT INTO accounts (id, username, password_hash, role, active, created_at)
+     VALUES (?, ?, ?, ?, 1, ?)`,
+    [
+      id,
+      input.username.trim(),
+      hashPassword(input.password),
+      input.role,
+      new Date().toISOString(),
+    ],
+  );
+
+  const created = await getAccountById(id);
+  if (!created) throw new Error("[store] Account insert failed");
+  return created;
+}
+
+export async function countAdmins(): Promise<number> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "SELECT COUNT(*) AS count FROM accounts WHERE role = 'admin' AND active = 1",
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+export async function setAccountActive(
+  id: string,
+  active: boolean,
+): Promise<boolean> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "UPDATE accounts SET active = ? WHERE id = ?",
+    [active ? 1 : 0, id],
+  );
+  return result.changes > 0;
+}
+
+export async function setAccountPassword(
+  id: string,
+  password: string,
+): Promise<boolean> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "UPDATE accounts SET password_hash = ? WHERE id = ?",
+    [hashPassword(password), id],
+  );
+  return result.changes > 0;
+}
+
+export async function deleteAccount(id: string): Promise<boolean> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query("DELETE FROM accounts WHERE id = ?", [id]);
+  return result.changes > 0;
+}
+
+export async function markAccountLogin(id: string): Promise<void> {
+  await ensureReady();
+  const db = await getDb();
+  await db.query("UPDATE accounts SET last_login_at = ? WHERE id = ?", [
+    new Date().toISOString(),
+    id,
+  ]);
 }
 
 /* ------------------------------- stats ------------------------------ */

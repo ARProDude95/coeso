@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { Offer } from "@/lib/store";
 
-export function OfferForm() {
+export function OfferForm({ offer }: { offer?: Offer }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+
+  const editing = Boolean(offer);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -16,20 +19,23 @@ export function OfferForm() {
     setSending(true);
     setError("");
 
-    const response = await fetch("/api/offers", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        title: data.get("title"),
-        company: data.get("company"),
-        role_type: data.get("role_type"),
-        commission: data.get("commission"),
-        pay_type: data.get("pay_type"),
-        description: data.get("description"),
-        requirements: data.get("requirements"),
-        featured: data.get("featured") === "on",
-      }),
-    });
+    const response = await fetch(
+      editing ? `/api/offers/${offer?.id}` : "/api/offers",
+      {
+        method: editing ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: data.get("title"),
+          company: data.get("company"),
+          role_type: data.get("role_type"),
+          commission: data.get("commission"),
+          pay_type: data.get("pay_type"),
+          description: data.get("description"),
+          requirements: data.get("requirements"),
+          featured: data.get("featured") === "on",
+        }),
+      },
+    );
 
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as {
@@ -37,16 +43,17 @@ export function OfferForm() {
       } | null;
       setError(
         payload?.error === "unauthorized"
-          ? "Your admin session expired — reload and sign in again."
-          : "Could not publish the offer. Check the fields.",
+          ? "Your account no longer has admin access — sign in again."
+          : "Could not save the offer. Check the fields.",
       );
       setSending(false);
       return;
     }
 
-    form.reset();
+    if (!editing) form.reset();
     setSending(false);
     router.refresh();
+    if (editing) router.push("/admin");
   }
 
   return (
@@ -61,6 +68,7 @@ export function OfferForm() {
           required
           maxLength={140}
           className="field"
+          defaultValue={offer?.title}
           placeholder="High-ticket closer — B2B SaaS"
         />
       </div>
@@ -74,13 +82,19 @@ export function OfferForm() {
           required
           maxLength={120}
           className="field"
+          defaultValue={offer?.company}
         />
       </div>
       <div>
         <label className="label" htmlFor="offer-role">
           Role type
         </label>
-        <select id="offer-role" name="role_type" className="field" defaultValue="closer">
+        <select
+          id="offer-role"
+          name="role_type"
+          className="field"
+          defaultValue={offer?.role_type ?? "closer"}
+        >
           <option value="setter">Setter</option>
           <option value="closer">Closer</option>
           <option value="both">Full cycle</option>
@@ -96,6 +110,7 @@ export function OfferForm() {
           required
           maxLength={140}
           className="field"
+          defaultValue={offer?.commission}
           placeholder="18% of contract value"
         />
       </div>
@@ -109,6 +124,7 @@ export function OfferForm() {
           required
           maxLength={80}
           className="field"
+          defaultValue={offer?.pay_type}
           placeholder="Commission only"
         />
       </div>
@@ -123,6 +139,7 @@ export function OfferForm() {
           rows={5}
           maxLength={4000}
           className="field resize-y"
+          defaultValue={offer?.description}
           placeholder="What the role is, who the leads are, how the cycle works…"
         />
       </div>
@@ -136,11 +153,17 @@ export function OfferForm() {
           rows={4}
           maxLength={4000}
           className="field resize-y"
+          defaultValue={offer?.requirements}
           placeholder="12+ months closing B2B deals over Zoom"
         />
       </div>
       <label className="flex items-center gap-3 text-sm text-mute sm:col-span-2">
-        <input type="checkbox" name="featured" className="h-4 w-4 accent-[#ff5a1f]" />
+        <input
+          type="checkbox"
+          name="featured"
+          defaultChecked={offer ? offer.featured === 1 : undefined}
+          className="h-4 w-4 accent-[#ff5a1f]"
+        />
         Feature this offer at the top of the board
       </label>
 
@@ -150,10 +173,23 @@ export function OfferForm() {
         </p>
       ) : null}
 
-      <div className="sm:col-span-2">
+      <div className="flex items-center gap-3 sm:col-span-2">
         <button type="submit" className="btn btn-primary" disabled={sending}>
-          {sending ? "Publishing…" : "Publish offer"}
+          {sending
+            ? "Saving…"
+            : editing
+              ? "Save changes"
+              : "Publish offer"}
         </button>
+        {editing ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => router.push("/admin")}
+          >
+            Cancel
+          </button>
+        ) : null}
       </div>
     </form>
   );

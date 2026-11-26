@@ -1,17 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isAdmin } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { createOffer, listOffers } from "@/lib/store";
 import { offerInput } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const includeClosed =
-    request.nextUrl.searchParams.get("all") === "1" && (await isAdmin());
+    session.role === "admin" &&
+    request.nextUrl.searchParams.get("all") === "1";
   const offers = await listOffers({ includeClosed });
   return NextResponse.json({ offers });
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdmin())) {
+  if ((await getSession())?.role !== "admin") {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

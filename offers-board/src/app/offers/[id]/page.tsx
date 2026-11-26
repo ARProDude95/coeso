@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ApplyForm } from "@/components/apply-form";
 import { getOffer } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -99,20 +98,31 @@ export default async function OfferPage({
 
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <div className="card p-6">
-            {offer.status === "open" ? (
-              <ApplyForm offerId={offer.id} />
-            ) : (
-              <div>
-                <h2 className="font-display text-2xl">Applications closed</h2>
-                <p className="mt-2 text-sm leading-relaxed text-mute">
-                  This offer is no longer taking applications.{" "}
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-ember">
+              {offer.status === "open" ? "Interested?" : "Closed"}
+            </p>
+            <h2 className="mt-3 font-display text-2xl">
+              {offer.status === "open"
+                ? "Reach out to Coeso"
+                : "No longer taking interest"}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-mute">
+              {offer.status === "open" ? (
+                <>
+                  Offers are looked after by Coeso’s Owner. Message{" "}
+                  <span className="font-mono text-ember">a1rymn</span> on
+                  Discord to put yourself forward for this role.
+                </>
+              ) : (
+                <>
+                  This offer has been closed.{" "}
                   <Link href="/offers" className="text-ember underline">
                     Browse the board
                   </Link>{" "}
                   for open roles.
-                </p>
-              </div>
-            )}
+                </>
+              )}
+            </p>
           </div>
         </aside>
       </div>

@@ -30,5 +30,17 @@ export const applicationInput = z.object({
   message: z.string().trim().max(2000).default(""),
 });
 
+export const accountInput = z.object({
+  username: z
+    .string()
+    .trim()
+    .regex(
+      /^[a-zA-Z0-9._-]{3,30}$/,
+      "Use 3–30 letters, numbers, dots, dashes or underscores",
+    ),
+  role: z.enum(["admin", "viewer"]).default("viewer"),
+});
+
 export type OfferInput = z.infer<typeof offerInput>;
 export type ApplicationInput = z.infer<typeof applicationInput>;
+export type AccountInput = z.infer<typeof accountInput>;

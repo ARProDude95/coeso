@@ -1,21 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LogoutButton } from "@/components/logout-button";
+import { getSession } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Coeso Offers Board — setter and closer roles",
   description:
-    "Open setter and closer offers from businesses inside Coeso. Find a role, see the split, apply in under a minute.",
+    "Private setter and closer offers from businesses inside Coeso. Access is invite-only.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const session = await getSession();
+
   return (
     <html lang="en">
       <body className="min-h-screen">
         <header className="sticky top-0 z-20 border-b border-line bg-ink/85 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
             <Link href="/offers" className="group flex items-baseline gap-3">
               <span className="font-display text-xl tracking-[0.18em]">
                 COESO
@@ -24,16 +28,33 @@ export default function RootLayout({
                 Offers Board
               </span>
             </Link>
-            <nav className="flex items-center gap-5 font-mono text-[10px] uppercase tracking-[0.22em] text-mute sm:gap-7">
+            <nav className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-[0.22em] text-mute sm:gap-6">
               <a href="https://coeso.biz" className="hover:text-paper">
                 Coeso
               </a>
-              <Link href="/offers" className="hover:text-paper">
-                Board
-              </Link>
-              <Link href="/offers/admin" className="hover:text-paper">
-                Admin
-              </Link>
+              {session ? (
+                <>
+                  <Link href="/offers" className="hover:text-paper">
+                    Board
+                  </Link>
+                  {session.role === "admin" ? (
+                    <Link href="/admin" className="hover:text-paper">
+                      Admin
+                    </Link>
+                  ) : null}
+                  <span className="hidden text-paper/70 sm:inline">
+                    {session.username}
+                  </span>
+                  <LogoutButton />
+                </>
+              ) : (
+                <Link
+                  href="/login"
+                  className="rounded-full border border-ember/60 px-3 py-1.5 text-ember transition hover:bg-ember hover:text-ink"
+                >
+                  Sign in
+                </Link>
+              )}
             </nav>
           </div>
         </header>
@@ -49,7 +70,7 @@ export default function RootLayout({
               </a>
             </span>
             <span className="font-mono uppercase tracking-[0.22em]">
-              Setters · Closers · Deals
+              Invite only · Discord a1rymn
             </span>
           </div>
         </footer>
