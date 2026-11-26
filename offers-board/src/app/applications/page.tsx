@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { EmptyState } from "@/components/empty-state";
 import { getSession } from "@/lib/auth";
 import { listApplicationsForAccount, type ApplicationStatus } from "@/lib/store";
 
@@ -64,16 +65,12 @@ export default async function MyApplicationsPage() {
       </section>
 
       {applications.length === 0 ? (
-        <div className="card mt-10 px-6 py-14 text-center">
-          <p className="font-display text-2xl">Nothing sent yet.</p>
-          <p className="mt-2 text-sm text-mute">
-            Open an offer and apply — it takes a minute, and you can follow it
-            here.
-          </p>
-          <Link href="/offers" className="btn btn-primary mt-6">
-            Browse offers
-          </Link>
-        </div>
+        <EmptyState
+          eyebrow="Nothing sent yet"
+          title="Your applications will land here."
+          body="Open an offer, apply in under a minute, and follow it from received to hired. Only you and Coeso’s Owner see this page."
+          action={{ href: "/offers", label: "Browse offers" }}
+        />
       ) : (
         <ul className="mt-8 divide-y divide-line">
           {applications.map((application) => {

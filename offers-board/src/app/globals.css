@@ -28,12 +28,30 @@ body {
   color: var(--color-ink);
 }
 
+/* One focus ring for the whole app: keyboard users see it, mouse users do not. */
+:focus-visible {
+  outline: 2px solid var(--color-ember);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
 /* --- small primitives shared across the few pages ------------------- */
 
 .card {
   border: 1px solid var(--color-line);
   background: var(--color-coal);
   border-radius: 14px;
+}
+
+.card-link {
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.card-link:hover {
+  border-color: color-mix(in srgb, var(--color-ember) 65%, transparent);
+  background: #15181d;
 }
 
 .field {
@@ -128,4 +146,81 @@ body {
   background: var(--color-ember);
   border-color: var(--color-ember);
   color: var(--color-ink);
+}
+
+/* --- type rhythm ---------------------------------------------------- */
+
+/* Every small label on the board uses this, so tracking and size never drift. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--color-mute);
+}
+
+.eyebrow-ember {
+  color: var(--color-ember);
+}
+
+/* Company initials stand in for a logo until one is uploaded. */
+.monogram {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--color-ember) 34%, var(--color-line));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--color-ember) 11%, var(--color-coal));
+  color: var(--color-ember);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+/* --- loading skeletons ---------------------------------------------- */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #171a1f;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(243, 239, 230, 0.055),
+    transparent
+  );
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+/* Mobile filter bar: hide the scrollbar on the pill row without killing scroll. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
