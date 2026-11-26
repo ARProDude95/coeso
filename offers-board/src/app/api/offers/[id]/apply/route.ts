@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
+import { notifyNewApplication } from "@/lib/notify";
 import {
   createApplication,
   getOffer,
@@ -55,6 +56,12 @@ export async function POST(
     },
     { id: session.id, username: session.username },
   );
+
+  await notifyNewApplication({
+    application,
+    offer,
+    origin: new URL(request.url).origin,
+  });
 
   return NextResponse.json({ application }, { status: 201 });
 }

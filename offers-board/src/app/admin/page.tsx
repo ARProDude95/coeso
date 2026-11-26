@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { OfferForm } from "@/components/offer-form";
 import { StatusToggle } from "@/components/status-toggle";
 import { getSession } from "@/lib/auth";
+import { notificationsConfigured } from "@/lib/notify";
 import {
   boardStats,
   listAccounts,
@@ -166,6 +167,11 @@ export default async function AdminPage() {
         <h2 className="font-mono text-[10px] uppercase tracking-[0.25em] text-mute">
           Applications ({applications.length})
         </h2>
+        <p className="mt-2 text-xs text-mute">
+          {notificationsConfigured()
+            ? "Each new application is also posted to your Discord webhook."
+            : "Set DISCORD_WEBHOOK_URL to get a Discord ping for every new application."}
+        </p>
         {applications.length === 0 ? (
           <p className="mt-4 text-sm text-mute">
             No applications yet. They appear here as soon as a signed-in member

@@ -564,3 +564,25 @@ flag until feature 8 added real Whop subscriptions.
   SQLite, so `sites_prepare_next` completes its Next/Worker build and manifest
   generation and then fails while seeding the local preview cache. The deploy
   uses the generated `freebuff-sites-build/manifest.json`.
+
+### Offers Board — Discord ping on new applications ✅
+
+- **Why:** applications were pull-only. The dashboard was the only signal, so
+  a good applicant could wait a day for a reply.
+- **What:** `lib/notify.ts` posts one embed to `DISCORD_WEBHOOK_URL` from
+  `POST /api/offers/[id]/apply`, after the application is saved. Fields: member
+  username, email, Discord handle, hours per week, the offer (title, company,
+  pay type, role), experience and the optional message, with the embed title
+  linking to `/admin`. `DISCORD_MENTION` (optional) prepends a role/user
+  mention so the post can actually ping.
+- **Best-effort by design:** no webhook, a 5s timeout or a Discord error is
+  logged and never changes the member's response. Verified by killing the
+  receiving server mid-test: the application still answered `201`.
+- **Visibility:** `/admin` states whether a webhook is configured, so a silent
+  board is obvious instead of mysterious.
+- **Checks:** local workerd run with a capture server as the webhook — apply
+  returned `201` and the captured payload had the expected embed (title, link,
+  all six fields, message). Deployed to preview and production; both serve the
+  hint in `/admin` and still answer `201` on apply with no webhook set. The
+  real Discord delivery has not been exercised because `DISCORD_WEBHOOK_URL`
+  is not yet set on the site.

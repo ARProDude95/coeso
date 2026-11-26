@@ -67,6 +67,8 @@ and post offers from `/admin`.
 | `ADMIN_PASSWORD` | yes | Password for the seeded owner account |
 | `ADMIN_SECRET` | yes | Signing key for session cookies |
 | `SEED_DEMO_DATA` | no | `false` disables the demo seed |
+| `DISCORD_WEBHOOK_URL` | no | Discord webhook pinged on every new application |
+| `DISCORD_MENTION` | no | Optional mention in the notification, e.g. `<@&123…>` |
 
 `ADMIN_PASSWORD` only seeds the account when no admin exists. Later changes to
 the environment do **not** reset a live password — use **Reset password** in
@@ -74,6 +76,23 @@ the dashboard, which issues a new one-time password.
 
 The database is the platform-provided `DB` binding, so there is no connection
 string to configure. Provision it once per site environment.
+
+## Application notifications
+
+When a signed-in member applies, `POST /api/offers/[id]/apply` posts one embed
+to `DISCORD_WEBHOOK_URL` after the application is saved: member username,
+email, Discord handle, hours per week, the offer with its pay and role, the
+experience text and the optional message. The embed links back to `/admin`, so
+the notification is one click from the review table.
+
+Create it in Discord under **Server Settings → Integrations → Webhooks → New
+Webhook**, then store the URL as a site secret on Freebuff Sites (or in
+`.env.local` for local development). Add `DISCORD_MENTION` with a role/user
+mention (`<@&123456789012345678>`) if you want the post to ping.
+
+Delivery is best-effort by design: no webhook, a timeout (5s) or a Discord
+error is logged and never blocks or fails the member's application. The `/admin`
+applications section tells you whether a webhook is configured.
 
 ## Routes
 
