@@ -1,29 +1,39 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useToast } from "@/components/toast";
 import type { ApplicationStatus as Status } from "@/lib/store";
 
-const OPTIONS: Array<{ value: Status; label: string }> = [
-  { value: "new", label: "New" },
-  { value: "reviewing", label: "Reviewing" },
-  { value: "shortlisted", label: "Shortlisted" },
-  { value: "hired", label: "Hired" },
+const OPTIONS: Array<{ value: Status; label: string; past: string }> = [
+  { value: "new", label: "New", past: "Received" },
+  { value: "reviewing", label: "Reviewing", past: "In review" },
+  { value: "shortlisted", label: "Shortlisted", past: "Shortlisted" },
+  { value: "hired", label: "Hired", past: "Hired" },
 ];
 
 export function ApplicationStatus({
   id,
   status,
+  offerId,
 }: {
   id: string;
   status: Status;
+  offerId?: string;
 }) {
-  const router = useRouter();
+  const toast = useToast();
+  const [current, setCurrent] = useState<Status>(status);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  async function update(next: string) {
-    if (next === status) return;
+  useEffect(() => {
+    setCurrent(status);
+  }, [status]);
+
+  async function update(next: Status) {
+    if (next === current || busy) return;
+
+    const previous = current;
+    setCurrent(next);
     setBusy(true);
     setError("");
 
@@ -36,18 +46,33 @@ export function ApplicationStatus({
     setBusy(false);
 
     if (!response.ok) {
+      setCurrent(previous);
       setError("Could not save");
+      toast("Could not change that application. Try again.", "error");
       return;
     }
 
-    router.refresh();
+    const payload = (await response.json().catch(() => null)) as {
+      offerClosed?: boolean;
+    } | null;
+
+    if (payload?.offerClosed && offerId) {
+      // Let the offers table on the same page close itself, no reload needed.
+      window.dispatchEvent(
+        new CustomEvent("coeso:offer-closed", { detail: { offerId } }),
+      );
+      toast("Hired — the offer is closed and off the board.");
+      return;
+    }
+
+    toast(`Moved to ${OPTIONS.find((o) => o.value === next)?.past ?? next}.`);
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex flex-col items-start gap-1">
       <select
-        value={status}
-        onChange={(event) => update(event.target.value)}
+        value={current}
+        onChange={(event) => update(event.target.value as Status)}
         disabled={busy}
         aria-label="Application status"
         className="rounded-md border border-line bg-coal px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-paper disabled:opacity-50"
@@ -58,7 +83,7 @@ export function ApplicationStatus({
           </option>
         ))}
       </select>
-      {status === "hired" ? (
+      {current === "hired" ? (
         <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-ember">
           offer closed
         </span>

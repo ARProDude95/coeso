@@ -64,3 +64,36 @@
 - **Not verified:** the browser-only behaviour itself (keystroke filtering,
   localStorage persistence across a closed tab, the compare tray and the draft
   restore) — no browser automation was run, per the standing HTTP-only rule.
+
+### Offers Board — admin responsiveness ✅
+
+- **Toasts:** `components/toast.tsx` provides a `ToastProvider` mounted in the
+  root layout and a `useToast()` hook. Success and error toasts stack bottom
+  centre on phones and bottom right on desktop, auto-dismiss after 4.5s, and sit
+  in an `aria-live="polite"` region with a dismiss button.
+- **Optimistic offers:** the admin table is now `components/offers-table.tsx`.
+  Close and Reopen flip the row's status immediately and roll back only if the
+  PATCH fails; Delete removes the row first and restores it on failure. No
+  `router.refresh()` anywhere in the table. `status-toggle.tsx` and
+  `delete-button.tsx` are gone.
+- **Optimistic applications:** the status select updates the moment it changes
+  and reverts on failure, with a toast on success ("Moved to Shortlisted") and
+  on error. Marking someone hired dispatches a `coeso:offer-closed` window event
+  that the offers table listens for, so the offer shows as closed on the same
+  page without a reload.
+- **Copy for Discord:** `components/copy-application.tsx` formats an application
+  as Discord markdown — member, `@handle` in backticks, email, offer and company,
+  hours, status, received date, an Experience block and Notes when present — and
+  copies it with `navigator.clipboard`, falling back to a hidden textarea. The
+  toast confirms what was copied or says the clipboard was blocked.
+- **Checks:** `tsc --noEmit` clean; OpenNext build clean; 14 formatter assertions
+  passed under Bun (structure, handle formatting, offer/company line, status
+  label, date, experience block, Notes only when present, name fallback, missing
+  offer tolerated, no trailing newline). Local workerd: `/admin` renders 6 Close
+  buttons, a Delete per offer, a Copy per application and the toast live region;
+  PATCH status, close, reopen and DELETE all answer 200. Deployed to both
+  environments; preview shows the Close buttons on 6 offers and Copy on its 2
+  applications, production renders the toast region with its empty tables.
+- **Not verified:** the real click-through (toast appearance, rollback on a
+  forced network failure, clipboard contents in a browser) — HTTP and logic
+  checks only, no browser automation.

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
+import { ToastProvider } from "@/components/toast";
 import { getSession } from "@/lib/auth";
 import "./globals.css";
 
@@ -62,7 +63,7 @@ export default async function RootLayout({
           </div>
         </header>
 
-        {children}
+        <ToastProvider>{children}</ToastProvider>
 
         <footer className="mt-24 border-t border-line">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-8 text-xs text-mute sm:flex-row sm:items-center sm:justify-between">

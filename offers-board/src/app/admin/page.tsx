@@ -2,10 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AccountsManager } from "@/components/accounts-manager";
 import { ApplicationStatus } from "@/components/application-status";
-import { DeleteButton } from "@/components/delete-button";
+import { CopyApplication } from "@/components/copy-application";
 import { LogoutButton } from "@/components/logout-button";
 import { OfferForm } from "@/components/offer-form";
-import { StatusToggle } from "@/components/status-toggle";
+import { OffersTable } from "@/components/offers-table";
 import { getSession } from "@/lib/auth";
 import { notificationsConfigured } from "@/lib/notify";
 import {
@@ -85,68 +85,7 @@ export default async function AdminPage() {
         <h2 className="font-mono text-[10px] uppercase tracking-[0.25em] text-mute">
           Offers ({offers.length})
         </h2>
-        <div className="mt-4 overflow-x-auto rounded-xl border border-line">
-          <table className="w-full min-w-[820px] text-left text-sm">
-            <thead className="bg-coal font-mono text-[10px] uppercase tracking-[0.2em] text-mute">
-              <tr>
-                <th className="px-4 py-3">Offer</th>
-                <th className="px-4 py-3">Company</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Posted</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {offers.map((offer) => (
-                <tr key={offer.id}>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/offers/${offer.id}`}
-                      className="hover:text-ember"
-                    >
-                      {offer.title}
-                    </Link>
-                    {offer.featured ? (
-                      <span className="ml-2 font-mono text-[9px] uppercase tracking-[0.18em] text-ember">
-                        featured
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3 text-mute">{offer.company}</td>
-                  <td className="px-4 py-3 text-mute">{offer.role_type}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={
-                        offer.status === "open" ? "text-ember" : "text-mute"
-                      }
-                    >
-                      {offer.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-mute">
-                    {formatDate(offer.created_at)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center justify-end gap-4">
-                      <Link
-                        href={`/admin/offers/${offer.id}`}
-                        className="font-mono text-[10px] uppercase tracking-[0.2em] text-mute underline decoration-line underline-offset-4 hover:text-paper"
-                      >
-                        Edit
-                      </Link>
-                      <StatusToggle id={offer.id} status={offer.status} />
-                      <DeleteButton
-                        path={`/api/offers/${offer.id}`}
-                        confirmText={`Delete "${offer.title}"? This cannot be undone.`}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <OffersTable offers={offers} />
       </section>
 
       <section className="mt-12">
@@ -189,6 +128,7 @@ export default async function AdminPage() {
                   <th className="px-4 py-3">Hours / wk</th>
                   <th className="px-4 py-3">Received</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -226,7 +166,11 @@ export default async function AdminPage() {
                       <ApplicationStatus
                         id={application.id}
                         status={application.status}
+                        offerId={application.offer_id}
                       />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <CopyApplication application={application} />
                     </td>
                   </tr>
                 ))}
