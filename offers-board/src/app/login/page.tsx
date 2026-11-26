@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
-import { monogram } from "@/components/offer-card";
+import { monogram } from "@/lib/offer-format";
 import { authConfigured, getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";

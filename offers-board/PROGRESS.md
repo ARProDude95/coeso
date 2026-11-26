@@ -28,3 +28,39 @@
   commission heroes, 3 new-this-week badges, 1 featured, filter empty state
   renders. Production: login teaser + CSS 200; board renders its empty state
   because production has no offers yet. No browser/screenshot review was done.
+
+### Offers Board — Batch 2 interactivity pass ✅
+
+- **Instant board:** the server sends the open offers once and
+  `components/board-browser.tsx` filters, sorts and chips them in the browser —
+  no round trip per keystroke. Search covers title, company, description,
+  requirements and pay type; charts are multi-select chips for role and for every
+  pay structure actually present on the board.
+- **Sorting:** newest, biggest commission (first number in the commission string,
+  so "18%" and "$900" order sensibly), oldest, company A–Z. Logic lives in
+  `lib/board-filter.ts` as a pure function.
+- **Shortlist:** ★ on each card writes to `localStorage` under
+  `coeso.shortlist.offers`; the "★ Shortlisted · n" chip filters to it and
+  unstarring from inside the filter removes the row immediately.
+- **Compare:** up to three offers; a fixed tray at the bottom holds the
+  selection and "Compare" opens a side-by-side table (role, commission, pay,
+  posted, open/remove). The selection is stored under `coeso.compare.offers` so
+  opening an offer and coming back does not clear it.
+- **Apply form:** inline validation per field (email shape, Discord, a little
+  experience detail, whole hours 1–80, message cap) with `aria-invalid`,
+  `aria-describedby` and a focus jump to the first invalid field on submit. A
+  draft is written to `coeso.apply.draft.<offerId>` on every keystroke, restored
+  on return with a "Picked up where you left off" note and "Start over", and
+  cleared on successful submit. Validation and draft normalization live in
+  `lib/apply-fields.ts`.
+- **Checks:** `tsc --noEmit` clean; OpenNext build clean; 26 pure-logic checks
+  passed under Bun (search/role/pay/shortlist filters, four sort orders, pay
+  option derivation, validation rules, draft normalization). Local workerd:
+  board renders 6 cards each with shortlist + compare controls, sort select and
+  chips; apply API still answers 400 for a bad email, 201 for a valid
+  application, 409 for a repeat. Both environments deployed: preview shows the
+  controls on 6 cards, production renders the filter bar and empty state (no
+  offers yet).
+- **Not verified:** the browser-only behaviour itself (keystroke filtering,
+  localStorage persistence across a closed tab, the compare tray and the draft
+  restore) — no browser automation was run, per the standing HTTP-only rule.

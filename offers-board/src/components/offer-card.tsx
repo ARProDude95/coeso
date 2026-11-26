@@ -1,42 +1,33 @@
+"use client";
+
 import Link from "next/link";
+import { ROLE_LABELS, isNewThisWeek, monogram } from "@/lib/offer-format";
 import type { Offer } from "@/lib/store";
 
-const ROLE_LABEL: Record<Offer["role_type"], string> = {
-  setter: "Setter",
-  closer: "Closer",
-  both: "Full cycle",
-};
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** "Northwind Growth" → "NG", "Palewood" → "P". */
-export function monogram(company: string): string {
-  const words = company.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "—";
-  return words
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-}
-
-export function isNewThisWeek(createdAt: string): boolean {
-  const created = new Date(createdAt).getTime();
-  return Number.isFinite(created) && Date.now() - created < WEEK_MS;
-}
-
 /**
- * The board card. Commission is the thing people compare, so it gets the
- * display face and the only coloured figure on the card.
+ * Board card. The title link stretches over the whole card, and the two
+ * controls sit above it so the card stays one big target without nesting
+ * buttons inside an anchor.
  */
-export function OfferCard({ offer }: { offer: Offer }) {
+export function OfferCard({
+  offer,
+  shortlisted,
+  compared,
+  compareDisabled,
+  onToggleShortlist,
+  onToggleCompare,
+}: {
+  offer: Offer;
+  shortlisted: boolean;
+  compared: boolean;
+  compareDisabled: boolean;
+  onToggleShortlist: (id: string) => void;
+  onToggleCompare: (id: string) => void;
+}) {
   const fresh = isNewThisWeek(offer.created_at);
 
   return (
-    <Link
-      href={`/offers/${offer.id}`}
-      className="card card-link group flex flex-col p-5 sm:p-6"
-    >
+    <article className="card card-link group relative flex flex-col p-5 sm:p-6">
       <div className="flex items-start gap-4">
         <span className="monogram" aria-hidden="true">
           {monogram(offer.company)}
@@ -45,7 +36,7 @@ export function OfferCard({ offer }: { offer: Offer }) {
           <p className="truncate text-[11px] uppercase tracking-[0.22em] text-paper/90">
             {offer.company}
           </p>
-          <p className="eyebrow mt-1.5">{ROLE_LABEL[offer.role_type]} role</p>
+          <p className="eyebrow mt-1.5">{ROLE_LABELS[offer.role_type]} role</p>
         </div>
         <div className="flex flex-col items-end gap-2">
           {offer.featured ? (
@@ -61,8 +52,13 @@ export function OfferCard({ offer }: { offer: Offer }) {
         </div>
       </div>
 
-      <h2 className="mt-6 font-display text-2xl leading-[1.15] transition group-hover:text-ember">
-        {offer.title}
+      <h2 className="mt-6 font-display text-2xl leading-[1.15]">
+        <Link
+          href={`/offers/${offer.id}`}
+          className="transition group-hover:text-ember after:absolute after:inset-0 after:content-['']"
+        >
+          {offer.title}
+        </Link>
       </h2>
 
       <div className="mt-6 border-t border-line pt-5">
@@ -76,12 +72,45 @@ export function OfferCard({ offer }: { offer: Offer }) {
         {offer.description}
       </p>
 
-      <div className="mt-auto flex items-center justify-between gap-4 border-t border-line pt-4 font-mono text-[10px] uppercase tracking-[0.22em] text-mute">
-        <span className="truncate">{offer.pay_type}</span>
-        <span className="shrink-0 text-paper opacity-0 transition group-hover:opacity-100">
-          Open →
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-line pt-4">
+        <span className="truncate font-mono text-[10px] uppercase tracking-[0.22em] text-mute">
+          {offer.pay_type}
         </span>
+        <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onToggleShortlist(offer.id)}
+            aria-pressed={shortlisted}
+            aria-label={
+              shortlisted
+                ? `Remove ${offer.title} from shortlist`
+                : `Shortlist ${offer.title}`
+            }
+            title={shortlisted ? "Remove from shortlist" : "Shortlist"}
+            className={`pill px-2 py-1 text-[13px] leading-none tracking-normal ${
+              shortlisted ? "border-ember text-ember" : ""
+            }`}
+          >
+            {shortlisted ? "★" : "☆"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggleCompare(offer.id)}
+            aria-pressed={compared}
+            disabled={!compared && compareDisabled}
+            aria-label={
+              compared
+                ? `Remove ${offer.title} from comparison`
+                : `Add ${offer.title} to comparison`
+            }
+            className={`pill px-2.5 py-1 disabled:cursor-not-allowed disabled:opacity-40 ${
+              compared ? "pill-active" : ""
+            }`}
+          >
+            {compared ? "Comparing" : "Compare"}
+          </button>
+        </div>
       </div>
-    </Link>
+    </article>
   );
 }
