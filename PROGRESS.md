@@ -494,3 +494,36 @@ flag until feature 8 added real Whop subscriptions.
   close/reopen/delete, account create/reset/disable/delete, old password
   rejected after reset, disabled session redirected, self-delete/disable
   guarded.
+
+### Offers Board — members can apply ✅
+
+- **Model change:** members are no longer view-only. A signed-in member applies
+  to a single offer from its page; the applicant identity (account id and
+  username) comes from the session, never the request body. Nobody can apply
+  anonymously or to a closed offer, and a second application to the same offer
+  is rejected — members still cannot create/edit offers or see other members'
+  applications.
+- **Schema:** `applications` gained `account_id` (references `accounts`, `ON
+  DELETE SET NULL`) and `account_username`, so an application survives the
+  member's account being deleted while the admin can still see who applied.
+  Existing databases are migrated by a `PRAGMA table_info` guard that ALTERs
+  the two columns in.
+- **API:** `POST /api/offers/[id]/apply` (session required; 401 anonymous, 404
+  unknown offer, 409 closed or already applied, 400 invalid fields) and
+  `PATCH /api/applications/[id] {status}` (admin only, `new`/`reviewed`).
+- **UI:** the offer page's sidebar now carries a compact apply form (email,
+  Discord, experience, hours per week, optional message) instead of pointing
+  people at Discord, and switches to an "Application received" state once the
+  member has applied. The admin dashboard's applications table shows the member
+  username, their message, the status, and a "Mark reviewed" / "Mark new"
+  toggle.
+- **Checks:** `npx tsc --noEmit` and `next build` clean (17 routes, including
+  both new ones). HTTP checks against `next start` on a throwaway SQLite file:
+  anonymous apply 401; member apply 201; duplicate 409; invalid body rejected;
+  closed offer 409; unknown offer 404; member reading applications 401; member
+  PATCH of an application 401; admin sees the application with the member's
+  username and marks it reviewed 200; bad status 400; offer page shows the form
+  before applying and "Application received" after; `/admin` renders the member
+  and the review toggle; anonymous offer page still 307 to `/login`. Test
+  accounts and the temp offer were deleted afterwards; the probe database was a
+  separate file, so the local `.data/offers.db` was untouched.

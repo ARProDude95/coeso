@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AccountsManager } from "@/components/accounts-manager";
+import { ApplicationStatus } from "@/components/application-status";
 import { DeleteButton } from "@/components/delete-button";
 import { LogoutButton } from "@/components/logout-button";
 import { OfferForm } from "@/components/offer-form";
@@ -167,25 +168,35 @@ export default async function AdminPage() {
         </h2>
         {applications.length === 0 ? (
           <p className="mt-4 text-sm text-mute">
-            No applications yet. They appear here as soon as someone applies.
+            No applications yet. They appear here as soon as a signed-in member
+            applies from an offer page.
           </p>
         ) : (
           <div className="mt-4 overflow-x-auto rounded-xl border border-line">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[1040px] text-left text-sm">
               <thead className="bg-coal font-mono text-[10px] uppercase tracking-[0.2em] text-mute">
                 <tr>
-                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Member</th>
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Discord</th>
                   <th className="px-4 py-3">Offer</th>
                   <th className="px-4 py-3">Hours / wk</th>
                   <th className="px-4 py-3">Received</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {applications.map((application) => (
                   <tr key={application.id}>
-                    <td className="px-4 py-3">{application.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono">{application.name}</span>
+                      {application.message ? (
+                        <p className="mt-1 max-w-xs text-xs leading-relaxed text-mute">
+                          {application.message}
+                        </p>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3">
                       <a
                         className="text-ember underline"
@@ -205,6 +216,23 @@ export default async function AdminPage() {
                     </td>
                     <td className="px-4 py-3 text-mute">
                       {formatDate(application.created_at)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={
+                          application.status === "new"
+                            ? "text-ember"
+                            : "text-mute"
+                        }
+                      >
+                        {application.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <ApplicationStatus
+                        id={application.id}
+                        status={application.status}
+                      />
                     </td>
                   </tr>
                 ))}

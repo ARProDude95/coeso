@@ -29,6 +29,8 @@ export interface Application {
   availability_hours: number;
   message: string;
   status: "new" | "reviewed";
+  account_id: string | null;
+  account_username: string;
   created_at: string;
 }
 
@@ -77,9 +79,12 @@ const SCHEMA = [
      availability_hours INTEGER NOT NULL,
      message            TEXT NOT NULL DEFAULT '',
      status             TEXT NOT NULL DEFAULT 'new',
+     account_id         TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+     account_username   TEXT NOT NULL DEFAULT '',
      created_at         TEXT NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS applications_offer_idx ON applications (offer_id)`,
+  `CREATE INDEX IF NOT EXISTS applications_account_idx ON applications (account_id)`,
   `CREATE TABLE IF NOT EXISTS accounts (
      id            TEXT PRIMARY KEY,
      username      TEXT NOT NULL,
@@ -196,6 +201,7 @@ async function bootstrap(): Promise<void> {
     await db.query(statement);
   }
 
+  await migrate(db);
   await seedAdmin(db);
 
   if (process.env.SEED_DEMO_DATA === "false") return;
@@ -221,6 +227,24 @@ async function bootstrap(): Promise<void> {
         offer.featured ? 1 : 0,
         isoDaysFromNow(-(index * 2 + 1)),
       ],
+    );
+  }
+}
+
+/**
+ * Older databases were created before members could apply, so the application
+ * table gains its account link here. SQLite has no IF NOT EXISTS for columns.
+ */
+async function migrate(db: Db): Promise<void> {
+  const columns = await db.query("PRAGMA table_info(applications)");
+  const names = new Set(columns.rows.map((row) => String(row.name)));
+
+  if (!names.has("account_id")) {
+    await db.query("ALTER TABLE applications ADD COLUMN account_id TEXT");
+  }
+  if (!names.has("account_username")) {
+    await db.query(
+      "ALTER TABLE applications ADD COLUMN account_username TEXT NOT NULL DEFAULT ''",
     );
   }
 }
@@ -374,16 +398,18 @@ export async function setOfferStatus(
 
 export async function createApplication(
   input: ApplicationInput,
+  account: { id: string; username: string },
 ): Promise<Application> {
   await ensureReady();
   const db = await getDb();
   const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
 
   await db.query(
     `INSERT INTO applications (
        id, offer_id, name, email, discord, experience, availability_hours,
-       message, status, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)`,
+       message, status, account_id, account_username, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
     [
       id,
       input.offer_id,
@@ -393,7 +419,9 @@ export async function createApplication(
       input.experience,
       input.availability_hours,
       input.message,
-      new Date().toISOString(),
+      account.id,
+      account.username,
+      createdAt,
     ],
   );
 
@@ -407,8 +435,37 @@ export async function createApplication(
     availability_hours: input.availability_hours,
     message: input.message,
     status: "new",
-    created_at: new Date().toISOString(),
+    account_id: account.id,
+    account_username: account.username,
+    created_at: createdAt,
   };
+}
+
+/** Whether this account already applied to this offer. */
+export async function hasAppliedForOffer(
+  offerId: string,
+  accountId: string,
+): Promise<boolean> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "SELECT 1 AS found FROM applications WHERE offer_id = ? AND account_id = ? LIMIT 1",
+    [offerId, accountId],
+  );
+  return result.rows.length > 0;
+}
+
+export async function setApplicationStatus(
+  id: string,
+  status: Application["status"],
+): Promise<boolean> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "UPDATE applications SET status = ? WHERE id = ?",
+    [status, id],
+  );
+  return result.changes > 0;
 }
 
 export async function listApplications(): Promise<Application[]> {

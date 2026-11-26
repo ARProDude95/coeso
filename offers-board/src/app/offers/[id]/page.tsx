@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getOffer } from "@/lib/store";
+import { ApplyForm } from "@/components/apply-form";
+import { getSession } from "@/lib/auth";
+import { getOffer, hasAppliedForOffer } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,9 @@ export default async function OfferPage({
   const { id } = await params;
   const offer = await getOffer(id);
   if (!offer) notFound();
+
+  const session = await getSession();
+  const applied = session ? await hasAppliedForOffer(offer.id, session.id) : false;
 
   const paragraphs = offer.description.split(/\n{2,}/).filter(Boolean);
   const requirements = offer.requirements
@@ -101,28 +106,47 @@ export default async function OfferPage({
             <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-ember">
               {offer.status === "open" ? "Interested?" : "Closed"}
             </p>
-            <h2 className="mt-3 font-display text-2xl">
-              {offer.status === "open"
-                ? "Reach out to Coeso"
-                : "No longer taking interest"}
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-mute">
-              {offer.status === "open" ? (
-                <>
-                  Offers are looked after by Coeso’s Owner. Message{" "}
-                  <span className="font-mono text-ember">a1rymn</span> on
-                  Discord to put yourself forward for this role.
-                </>
-              ) : (
-                <>
+
+            {offer.status === "open" && applied ? (
+              <>
+                <h2 className="mt-3 font-display text-2xl">
+                  Application received
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-mute">
+                  Coeso’s Owner has your application for this offer and will
+                  reply to the email you gave. Message{" "}
+                  <span className="font-mono text-ember">a1rymn</span> on Discord
+                  if you want to add anything.
+                </p>
+              </>
+            ) : offer.status === "open" ? (
+              <>
+                <h2 className="mt-3 font-display text-2xl">
+                  Apply for this role
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-mute">
+                  Signed in as{" "}
+                  <span className="font-mono text-paper">
+                    {session?.username}
+                  </span>
+                  . Your application goes straight to Coeso’s Owner.
+                </p>
+                <ApplyForm offerId={offer.id} />
+              </>
+            ) : (
+              <>
+                <h2 className="mt-3 font-display text-2xl">
+                  No longer taking interest
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-mute">
                   This offer has been closed.{" "}
                   <Link href="/offers" className="text-ember underline">
                     Browse the board
                   </Link>{" "}
                   for open roles.
-                </>
-              )}
-            </p>
+                </p>
+              </>
+            )}
           </div>
         </aside>
       </div>

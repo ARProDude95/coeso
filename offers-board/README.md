@@ -16,9 +16,10 @@ links to it as a menu tab.
 - **The owner is the admin.** The first admin account is seeded from
   `ADMIN_USERNAME` / `ADMIN_PASSWORD` on the first request, then stored hashed
   in the database.
-- **Members are view-only.** The admin creates an account (`/admin` → Accounts)
-  and gets a one-time password to send to that person. Members can open the
-  board and an offer, and nothing else.
+- **Members read and apply.** The admin creates an account (`/admin` →
+  Accounts) and gets a one-time password to send to that person. Members can
+  open the board and apply to a single offer from its page; they cannot create
+  or edit offers, or see other members' applications.
 - **Nothing bypasses the gate.** `/offers` and `/offers/[id]` redirect to
   `/login` without a valid session, every read API requires a session, and
   every write API requires an admin. Disabling or deleting an account ends its
@@ -88,7 +89,9 @@ required.
 | `POST` | `/api/accounts` `{username,role}` | admin |
 | `PATCH` | `/api/accounts/[id]` `{action}` | admin |
 | `DELETE` | `/api/accounts/[id]` | admin |
+| `POST` | `/api/offers/[id]/apply` | signed in |
 | `GET` | `/api/applications` | admin |
+| `PATCH` | `/api/applications/[id]` `{status}` | admin |
 
 `POST /api/accounts` and `PATCH … {action:"reset_password"}` return the new
 plaintext password once, for the admin to forward. It is never stored in clear.
@@ -138,6 +141,9 @@ to be changed in that project.)
   (`admin` / `viewer`), active flag, created_at, last_login_at
 - `offers` — title, company, role type (setter/closer/both), commission, pay
   type, description, requirements, status (open/closed), featured, created_at
-- `applications` — legacy board applications, readable by the admin
+- `applications` — offer, member account (id + username, name cleared if the
+  account is deleted), email, Discord, experience, hours per week, message,
+  status (`new` / `reviewed`). The admin reads and reviews them on `/admin`;
+  the applicant identity is taken from the session, never the request body.
 
 Schema is created idempotently on first request (`CREATE TABLE IF NOT EXISTS`).

@@ -30,6 +30,20 @@ export const applicationInput = z.object({
   message: z.string().trim().max(2000).default(""),
 });
 
+/** What a signed-in member fills in: the account supplies name and offer. */
+export const memberApplicationInput = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(3)
+    .max(200)
+    .regex(EMAIL, "Enter a valid email address"),
+  discord: text(80),
+  experience: text(400),
+  availability_hours: z.coerce.number().int().min(1).max(80),
+  message: z.string().trim().max(2000).default(""),
+});
+
 export const accountInput = z.object({
   username: z
     .string()
@@ -43,4 +57,5 @@ export const accountInput = z.object({
 
 export type OfferInput = z.infer<typeof offerInput>;
 export type ApplicationInput = z.infer<typeof applicationInput>;
+export type MemberApplicationInput = z.infer<typeof memberApplicationInput>;
 export type AccountInput = z.infer<typeof accountInput>;
