@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   const allowed =
     account &&
     account.active === 1 &&
-    verifyPassword(password, account.password_hash);
+    (await verifyPassword(password, account.password_hash));
 
   if (!account || !allowed) {
     // Slow down guessing without leaking whether the username exists.

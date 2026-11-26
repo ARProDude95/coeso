@@ -54,7 +54,7 @@ export interface BoardStats {
   applications: number;
 }
 
-const SCHEMA = [
+const TABLES = [
   `CREATE TABLE IF NOT EXISTS offers (
      id          TEXT PRIMARY KEY,
      title       TEXT NOT NULL,
@@ -68,7 +68,15 @@ const SCHEMA = [
      featured    INTEGER NOT NULL DEFAULT 0,
      created_at  TEXT NOT NULL
    )`,
-  `CREATE INDEX IF NOT EXISTS offers_status_idx ON offers (status)`,
+  `CREATE TABLE IF NOT EXISTS accounts (
+     id            TEXT PRIMARY KEY,
+     username      TEXT NOT NULL,
+     password_hash TEXT NOT NULL,
+     role          TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'viewer')),
+     active        INTEGER NOT NULL DEFAULT 1,
+     created_at    TEXT NOT NULL,
+     last_login_at TEXT
+   )`,
   `CREATE TABLE IF NOT EXISTS applications (
      id                 TEXT PRIMARY KEY,
      offer_id           TEXT NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
@@ -83,17 +91,14 @@ const SCHEMA = [
      account_username   TEXT NOT NULL DEFAULT '',
      created_at         TEXT NOT NULL
    )`,
+];
+
+// Indexes are created after the column migration below, so a database that
+// predates the account link still gets its applications index.
+const INDEXES = [
+  `CREATE INDEX IF NOT EXISTS offers_status_idx ON offers (status)`,
   `CREATE INDEX IF NOT EXISTS applications_offer_idx ON applications (offer_id)`,
   `CREATE INDEX IF NOT EXISTS applications_account_idx ON applications (account_id)`,
-  `CREATE TABLE IF NOT EXISTS accounts (
-     id            TEXT PRIMARY KEY,
-     username      TEXT NOT NULL,
-     password_hash TEXT NOT NULL,
-     role          TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'viewer')),
-     active        INTEGER NOT NULL DEFAULT 1,
-     created_at    TEXT NOT NULL,
-     last_login_at TEXT
-   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS accounts_username_idx ON accounts (lower(username))`,
 ];
 
@@ -197,11 +202,16 @@ async function ensureReady(): Promise<void> {
 
 async function bootstrap(): Promise<void> {
   const db = await getDb();
-  for (const statement of SCHEMA) {
+  for (const statement of TABLES) {
     await db.query(statement);
   }
 
   await migrate(db);
+
+  for (const statement of INDEXES) {
+    await db.query(statement);
+  }
+
   await seedAdmin(db);
 
   if (process.env.SEED_DEMO_DATA === "false") return;
@@ -233,19 +243,23 @@ async function bootstrap(): Promise<void> {
 
 /**
  * Older databases were created before members could apply, so the application
- * table gains its account link here. SQLite has no IF NOT EXISTS for columns.
+ * table gains its account link here. SQLite has no IF NOT EXISTS for columns,
+ * and D1 does not expose PRAGMA table_info, so a duplicate-column error is the
+ * "already applied" signal.
  */
 async function migrate(db: Db): Promise<void> {
-  const columns = await db.query("PRAGMA table_info(applications)");
-  const names = new Set(columns.rows.map((row) => String(row.name)));
+  const additions = [
+    "ALTER TABLE applications ADD COLUMN account_id TEXT",
+    "ALTER TABLE applications ADD COLUMN account_username TEXT NOT NULL DEFAULT ''",
+  ];
 
-  if (!names.has("account_id")) {
-    await db.query("ALTER TABLE applications ADD COLUMN account_id TEXT");
-  }
-  if (!names.has("account_username")) {
-    await db.query(
-      "ALTER TABLE applications ADD COLUMN account_username TEXT NOT NULL DEFAULT ''",
-    );
+  for (const statement of additions) {
+    try {
+      await db.query(statement);
+    } catch (error) {
+      const message = String(error).toLowerCase();
+      if (!message.includes("duplicate column")) throw error;
+    }
   }
 }
 
@@ -270,7 +284,7 @@ async function seedAdmin(db: Db): Promise<void> {
     [
       crypto.randomUUID(),
       username,
-      hashPassword(password),
+      await hashPassword(password),
       new Date().toISOString(),
     ],
   );
@@ -532,7 +546,7 @@ export async function createAccount(input: {
     [
       id,
       input.username.trim(),
-      hashPassword(input.password),
+      await hashPassword(input.password),
       input.role,
       new Date().toISOString(),
     ],
@@ -573,7 +587,7 @@ export async function setAccountPassword(
   const db = await getDb();
   const result = await db.query(
     "UPDATE accounts SET password_hash = ? WHERE id = ?",
-    [hashPassword(password), id],
+    [await hashPassword(password), id],
   );
   return result.changes > 0;
 }

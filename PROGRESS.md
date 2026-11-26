@@ -527,3 +527,40 @@ flag until feature 8 added real Whop subscriptions.
   and the review toggle; anonymous offer page still 307 to `/login`. Test
   accounts and the temp offer were deleted afterwards; the probe database was a
   separate file, so the local `.data/offers.db` was untouched.
+
+### Offers Board — public deployment on Freebuff Sites ✅
+
+- **Live:** production `https://coeso-offers-board-gzjzfv.freebuff.site`,
+  preview `https://coeso-offers-board-gzjzfv-preview.freebuff.site`. Both are
+  published; production runs with `SEED_DEMO_DATA=false` (empty board), preview
+  keeps the demo offers.
+- **Why a new site:** the older "Coeso Offers Board" site hosts the root app's
+  D1 database, whose `offers`/`applications` tables have a different schema.
+  The board got its own site (`b3f6c1d2-…`) with one D1 database per environment
+  bound as `DB`, so nothing touches live data and no schema archaeology was
+  needed.
+- **Runtime migration (required to run on Workers):**
+  - `lib/db.ts` now reads the `DB` D1 binding through `getCloudflareContext`
+    instead of `node:sqlite` behind Turso credentials. `next dev` gets the same
+    binding via `initOpenNextCloudflareForDev`, scoped to development because
+    the call starts workerd and broke the deploy build.
+  - `lib/password.ts` moved from `node:crypto` scrypt to Web Crypto PBKDF2.
+    **Cloudflare caps PBKDF2 at 100,000 iterations** ("iteration counts above
+    100000 are not supported" was the exact production error behind a 500 on
+    every login), so the constant is 100k — the Workers ceiling.
+  - `lib/store.ts` splits schema creation into tables → column migration →
+    indexes, because D1 has no `PRAGMA table_info`; a duplicate-column error is
+    the "already applied" signal.
+- **Checks:** local workerd (`wrangler dev` with a fresh D1) exercised schema
+  bootstrap, demo seed, admin dashboard, offer create, account create, member
+  login, member blocked from `/admin` (307), apply with session attribution,
+  admin review list, and a 401 for a bad password. On production over HTTPS:
+  `/login` 200 with the invite-only copy, anonymous `/offers` → 307 `/login`,
+  bad login 401, admin login 200, `/admin` 200, empty-board copy rendered,
+  offer create 201 → offer page 200 → delete 200 (probe removed), anon
+  `/api/accounts` 401. Secrets set as `ADMIN_USERNAME`, `ADMIN_PASSWORD`,
+  `ADMIN_SECRET`, `SEED_DEMO_DATA`; the temporary secret files were deleted.
+- **Note on local builds:** this workspace path is too long for workerd's
+  SQLite, so `sites_prepare_next` completes its Next/Worker build and manifest
+  generation and then fails while seeding the local preview cache. The deploy
+  uses the generated `freebuff-sites-build/manifest.json`.

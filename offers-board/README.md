@@ -27,12 +27,14 @@ links to it as a menu tab.
 
 ## Stack
 
-- Next.js 16 (App Router, Node runtime) + React 19 + TypeScript
+- Next.js 16 (App Router) + React 19 + TypeScript, built for Cloudflare
+  Workers with [OpenNext](https://opennext.js.org/cloudflare)
 - Tailwind CSS 4
-- SQLite: Node's built-in `node:sqlite` locally, [Turso](https://turso.tech)
-  (libSQL over HTTP) in production — no native modules, works on serverless
+- SQLite on **Cloudflare D1**, bound as `DB` (one database per site
+  environment). `next dev` uses the same binding through
+  `initOpenNextCloudflareForDev`, so local and deployed behaviour match
 - Sessions: HMAC-signed, `httpOnly`, `SameSite=Lax` cookie; passwords hashed
-  with scrypt
+  with Web Crypto PBKDF2-SHA256 at 100,000 iterations (the Workers ceiling)
 
 ## Run locally
 
@@ -42,8 +44,17 @@ cp .env.example .env.local   # fill in ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_SEC
 npm run dev                  # http://localhost:3000/login
 ```
 
-First request creates `.data/offers.db`, the schema, and the admin account.
-Set `SEED_DEMO_DATA=false` to start with an empty board.
+`next dev` runs the app on the local D1 database from
+`freebuff.wrangler.jsonc`; state lives under `.wrangler/`. The first request
+creates the schema and the admin account. Set `SEED_DEMO_DATA=false` to start
+with an empty board.
+
+To exercise the exact Worker build (workerd + D1) before deploying:
+
+```bash
+npm run build
+npx wrangler dev --config freebuff.wrangler.jsonc --persist-to /tmp/board-state
+```
 
 Sign in at `/login` with the admin credentials, then create member accounts
 and post offers from `/admin`.
@@ -55,18 +66,14 @@ and post offers from `/admin`.
 | `ADMIN_USERNAME` | yes | Username for the seeded owner account (default `admin`) |
 | `ADMIN_PASSWORD` | yes | Password for the seeded owner account |
 | `ADMIN_SECRET` | yes | Signing key for session cookies |
-| `TURSO_DATABASE_URL` | production | `libsql://…` from Turso |
-| `TURSO_AUTH_TOKEN` | production | Turso token |
 | `SEED_DEMO_DATA` | no | `false` disables the demo seed |
-| `LOCAL_DB_PATH` | no | Override the local SQLite file path |
 
 `ADMIN_PASSWORD` only seeds the account when no admin exists. Later changes to
 the environment do **not** reset a live password — use **Reset password** in
 the dashboard, which issues a new one-time password.
 
-Without `TURSO_*` the app uses a SQLite file, which is fine locally and on any
-Node host with a writable disk. On Vercel (read-only filesystem) Turso is
-required.
+The database is the platform-provided `DB` binding, so there is no connection
+string to configure. Provision it once per site environment.
 
 ## Routes
 
@@ -96,20 +103,37 @@ required.
 `POST /api/accounts` and `PATCH … {action:"reset_password"}` return the new
 plaintext password once, for the admin to forward. It is never stored in clear.
 
-## Deploy
+## Live deployment
 
-1. **Create a Turso database** (free tier):
-   ```bash
-   turso db create coeso-offers
-   turso db show coeso-offers --url
-   turso db tokens create coeso-offers
-   ```
-2. **Deploy** this folder (`npx vercel --prod`, or import the repo with
-   **Root Directory = `offers-board`**).
-3. **Set env vars** in Production + Preview: `TURSO_DATABASE_URL`,
-   `TURSO_AUTH_TOKEN`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_SECRET`.
-4. Open the deployment URL — the first request creates the schema and the
-   owner account.
+Hosted on **Freebuff Sites** (Cloudflare Workers + D1):
+
+| Environment | URL |
+| --- | --- |
+| Production | https://coeso-offers-board-gzjzfv.freebuff.site |
+| Preview | https://coeso-offers-board-gzjzfv-preview.freebuff.site |
+
+Both are published. Production runs with `SEED_DEMO_DATA=false`, so the board
+starts empty; preview keeps the demo offers for review.
+
+### Redeploying
+
+```bash
+# 1. build the Worker bundle and manifest (writes freebuff-sites-build/)
+npx opennextjs-cloudflare build \
+  --config freebuff.wrangler.jsonc \
+  --openNextConfigPath freebuff.open-next.config.ts
+
+# 2. upload offers-board/freebuff-sites-build/manifest.json with the Sites
+#    deployer, targeting preview first, then production
+```
+
+Each site environment has one D1 database bound as `DB`; deploys attach it
+automatically. Secrets are set in the Sites panel (or with the Sites secret
+tool) and survive redeploys: `ADMIN_USERNAME`, `ADMIN_PASSWORD`,
+`ADMIN_SECRET`, and optionally `SEED_DEMO_DATA`.
+
+The first request after deployment creates the schema and the owner account
+from `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
 
 ## Add it to the coeso.biz menu
 
@@ -118,6 +142,12 @@ rewrite is needed:
 
 ```html
 <a href="https://<offers-board-url>/offers">Offers Board</a>
+```
+
+Concretely:
+
+```html
+<a href="https://coeso-offers-board-gzjzfv.freebuff.site/offers">Offers Board</a>
 ```
 
 Because `/offers` is gated, visitors land on `/login` first. If you would

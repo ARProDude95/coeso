@@ -1,6 +1,4 @@
-import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export type SqlValue = string | number | null;
 
@@ -13,12 +11,26 @@ export interface Db {
   query(sql: string, params?: SqlValue[]): Promise<QueryResult>;
 }
 
+/** The subset of the D1 API this app uses. */
+interface D1PreparedStatement {
+  bind(...values: SqlValue[]): D1PreparedStatement;
+  all<T = Record<string, unknown>>(): Promise<{
+    results?: T[];
+    meta?: { changes?: number };
+  }>;
+  run(): Promise<{ meta?: { changes?: number } }>;
+}
+
+interface D1DatabaseBinding {
+  prepare(sql: string): D1PreparedStatement;
+}
+
 const globalForDb = globalThis as unknown as { __coesoOffersDb?: Promise<Db> };
 
 /**
- * One database handle per process. Local development and any Node host use a
- * SQLite file through Node's built-in driver; on Vercel (read-only filesystem)
- * set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN to talk to Turso over HTTP.
+ * One database handle per isolate. The board runs on Freebuff Sites, so the
+ * database is the bound D1 database (`DB`) for both the deployed worker and
+ * `next dev` through initOpenNextCloudflareForDev in next.config.ts.
  */
 export function getDb(): Promise<Db> {
   globalForDb.__coesoOffersDb ??= createDb().catch((error: unknown) => {
@@ -29,54 +41,30 @@ export function getDb(): Promise<Db> {
 }
 
 async function createDb(): Promise<Db> {
-  const url = process.env.TURSO_DATABASE_URL?.trim();
-  const token = process.env.TURSO_AUTH_TOKEN?.trim();
-  if (url && token) return remote(url, token);
-  return local();
+  const context = await getCloudflareContext({ async: true });
+  const binding = (context.env as { DB?: D1DatabaseBinding }).DB;
+  if (!binding) {
+    throw new Error(
+      "[db] The DB D1 binding is missing. Provision it for this site environment and redeploy.",
+    );
+  }
+  return d1(binding);
 }
 
-function local(): Db {
-  const file =
-    process.env.LOCAL_DB_PATH?.trim() ||
-    join(process.cwd(), ".data", "offers.db");
-  mkdirSync(dirname(file), { recursive: true });
-
-  const database = new DatabaseSync(file);
-  database.exec("PRAGMA journal_mode = WAL;");
-  database.exec("PRAGMA foreign_keys = ON;");
-
+function d1(database: D1DatabaseBinding): Db {
   return {
     async query(sql, params = []) {
-      const statement = database.prepare(sql);
+      const prepared = params.length
+        ? database.prepare(sql).bind(...params)
+        : database.prepare(sql);
+
       if (/^\s*(select|with|pragma)\b/i.test(sql)) {
-        // node:sqlite rows have a null prototype, which React refuses to pass
-        // from a Server Component to a Client Component — copy them plain.
-        const rows = statement
-          .all(...params)
-          .map((row) => ({ ...(row as Record<string, unknown>) }));
-        return { rows, changes: 0 };
+        const result = await prepared.all();
+        return { rows: result.results ?? [], changes: 0 };
       }
-      const info = statement.run(...params);
-      return { rows: [], changes: Number(info.changes) };
-    },
-  };
-}
 
-async function remote(url: string, token: string): Promise<Db> {
-  const { createClient } = await import("@libsql/client/web");
-  const client = createClient({ url, authToken: token });
-
-  return {
-    async query(sql, params = []) {
-      const result = await client.execute({ sql, args: params });
-      const rows = result.rows.map((row) => {
-        const out: Record<string, unknown> = {};
-        result.columns.forEach((column, index) => {
-          out[column] = (row as unknown as unknown[])[index];
-        });
-        return out;
-      });
-      return { rows, changes: result.rowsAffected };
+      const result = await prepared.run();
+      return { rows: [], changes: Number(result.meta?.changes ?? 0) };
     },
   };
 }
