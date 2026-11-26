@@ -20,6 +20,10 @@ const devOrigin = process.env.NEXT_DEV_ALLOWED_ORIGIN?.trim();
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: devOrigin ? [devOrigin] : [],
+  // Keep security upgrades on the security policy for future reminders.
+  experimental: {
+    agentUpgrade: "security",
+  },
 };
 
 export default nextConfig;
