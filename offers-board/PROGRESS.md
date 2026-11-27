@@ -149,3 +149,18 @@
   (`200 {"ok":true,"username":"admin"}`, replay `409`), the new password signs
   in (`200`, `/admin` 200), and `.env.local` was updated to match. Not reviewed
   in a browser.
+
+### Offers Board — members can be given passwords you can dictate ✅
+
+- **Change:** `PATCH /api/accounts/:id` accepts an optional `password` on
+  `reset_password` (8–200 chars; letters, numbers, dots, dashes or
+  underscores, no spaces). Without it the route still generates a random
+  password, so the admin page's Reset button is unchanged.
+- **Live:** `jordan` and `sam` were both moved off random 14-character
+  passwords to short dictated ones. `sam` had been deleted from production,
+  so it was recreated as an active viewer and given the same style of
+  password.
+- **Checks:** typecheck clean; both accounts sign in (`200`, `role=viewer`),
+  `/offers` 200, `/admin` 307, and each account's previous password now
+  returns 401. A 5-character password is rejected with 400 before anything
+  is hashed. Passwords are deliberately not recorded in this file.

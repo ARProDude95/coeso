@@ -10,8 +10,22 @@ import {
   setAccountPassword,
 } from "@/lib/store";
 
+/**
+ * A dictated password: no spaces (so it survives being read over the phone) and
+ * at least 8 characters. Optional — without it the route generates one.
+ */
+const dictatedPassword = z
+  .string()
+  .trim()
+  .min(8, "Use at least 8 characters")
+  .max(200)
+  .regex(/^[A-Za-z0-9._-]+$/, "Letters, numbers, dots, dashes, underscores only");
+
 const patchInput = z.union([
-  z.object({ action: z.literal("reset_password") }),
+  z.object({
+    action: z.literal("reset_password"),
+    password: dictatedPassword.optional(),
+  }),
   z.object({ action: z.literal("set_active"), active: z.boolean() }),
 ]);
 
@@ -36,7 +50,8 @@ export async function PATCH(
   }
 
   if (parsed.data.action === "reset_password") {
-    const password = generatePassword();
+    // An admin may dictate a specific password; otherwise generate a random one.
+    const password = parsed.data.password ?? generatePassword();
     await setAccountPassword(id, password);
     return NextResponse.json({ ok: true, account, password });
   }
