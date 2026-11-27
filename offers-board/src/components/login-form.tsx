@@ -54,12 +54,16 @@ export function LoginForm() {
           id="login-username"
           name="username"
           required
-          autoComplete="username"
+          autoComplete="off"
           autoCapitalize="none"
+          autoCorrect="off"
           spellCheck={false}
           className="field"
         />
       </div>
+      {/* Board credentials are handed out by the owner, so a stale saved
+          password autofilled into this form is always wrong — and is the most
+          common cause of a "wrong password" the server accepts. */}
       <div>
         <label className="label" htmlFor="login-password">
           Password
@@ -69,7 +73,10 @@ export function LoginForm() {
           name="password"
           type="password"
           required
-          autoComplete="current-password"
+          autoComplete="new-password"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className="field"
         />
       </div>

@@ -130,3 +130,22 @@
 - **Not verified:** a real lockout on production (the recovery path was never
   exercised against the live admin, only locally with a throwaway admin), and
   no browser review.
+
+### Offers Board — login form no longer fights the browser ✅
+
+- **Symptom:** the owner reported "wrong credentials" while the server accepted
+  the same strings (all three accounts returned 200 to the login API).
+- **Cause class:** a stale saved password autofilled into the form. The password
+  field asked for `current-password`, which invites the browser's password
+  manager to inject an old value; the API then correctly rejects it.
+- **Fix:** `components/login-form.tsx` now sets `autoComplete="off"` on the
+  username and `autoComplete="new-password"` on the password, plus
+  `autoCorrect="off"` / `spellCheck={false}`, so a browser does not fill either
+  field. Board credentials are handed out by the owner, so autofill can only
+  ever be wrong here.
+- **Checks:** Next build clean; deployed production. `/login` HTML carries
+  `autoComplete="off"` on `#login-username` and `autoComplete="new-password"` on
+  `#login-password`. Admin password was rotated through the recovery endpoint
+  (`200 {"ok":true,"username":"admin"}`, replay `409`), the new password signs
+  in (`200`, `/admin` 200), and `.env.local` was updated to match. Not reviewed
+  in a browser.
