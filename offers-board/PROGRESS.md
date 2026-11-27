@@ -277,3 +277,11 @@
 - **Checks:** typecheck clean; production serves both (200, `image/png`, 39,825
   and 6,798 bytes) and the head carries
   `<link rel="icon" ... sizes="512x512">` plus the apple-touch-icon link.
+
+### Offers Board — SelectMenu tightened, phone-width panel verified ✅
+
+- **State and effects:** opening now sets the highlighted row directly (`openMenu()`), which removes the effect that re-synced it from `value`/`options` on every prop change. `close()` lost its never-used `focusTrigger` argument, and the selected row is derived once (`selectedIndex`) instead of being searched for on each render.
+- **Rows are listbox options, not buttons:** `role="option"` divs keep DOM focus on the panel, so Tab leaves the menu from the trigger instead of landing on a row that is about to unmount, and the arrow keys keep working after a click.
+- **Panel measured against the deployed stylesheet:** 375px — 240px wide, left edge 98px, right 338px, all four corners hit-test to the panel; 320px — left edge 43px, still inside the viewport. The sticky bar declares no `overflow`, and nothing between the panel and `<html>` clips, so the open list paints over the cards below it. The bar’s `z-10` stacking context stays under the header’s `z-20`, but the panel only opens downward and never reaches the header.
+- **Found while checking, not fixed:** `/offers` never leaves its `Loading…` skeleton in a browser. The streamed board sits hidden in `<div hidden id="S:0">` and the route-level loading UI is never replaced, while the same HTML arrives complete over curl in 8s — so it is client-side.
+- **Checks:** `bun run typecheck` clean. Not deployed.

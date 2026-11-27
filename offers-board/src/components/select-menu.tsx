@@ -44,13 +44,18 @@ export function SelectMenu<T extends string>({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  const current = options.find((option) => option.value === value) ?? options[0];
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  const current = options[selectedIndex] ?? options[0];
 
-  // Opening always starts on the current choice, as a native select does.
+  // Keep the highlighted row in view; focus follows the panel, not the rows, so
+  // Tab leaves the menu instead of landing inside it.
   useEffect(() => {
     if (!open) return;
-    setActive(Math.max(0, options.findIndex((option) => option.value === value)));
-  }, [open, value, options]);
+    listRef.current?.focus();
+    listRef.current
+      ?.querySelectorAll<HTMLElement>('[role="option"]')
+      [active]?.scrollIntoView({ block: "nearest" });
+  }, [open, active]);
 
   useEffect(() => {
     if (!open) return;
@@ -63,17 +68,15 @@ export function SelectMenu<T extends string>({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    listRef.current?.focus();
-    listRef.current
-      ?.querySelectorAll<HTMLElement>('[role="option"]')
-      [active]?.scrollIntoView({ block: "nearest" });
-  }, [open, active]);
+  // Opening always starts on the current choice, as a native select does.
+  function openMenu() {
+    setActive(selectedIndex < 0 ? 0 : selectedIndex);
+    setOpen(true);
+  }
 
-  function close(focusTrigger = true) {
+  function close() {
     setOpen(false);
-    if (focusTrigger) triggerRef.current?.focus();
+    triggerRef.current?.focus();
   }
 
   function choose(index: number) {
@@ -111,7 +114,10 @@ export function SelectMenu<T extends string>({
         close();
         break;
       case "Tab":
-        setOpen(false);
+        // Close, then let Tab continue from the trigger rather than a row that
+        // is about to unmount.
+        event.preventDefault();
+        close();
         break;
     }
   }
@@ -127,11 +133,11 @@ export function SelectMenu<T extends string>({
         aria-controls={open ? `${id}-list` : undefined}
         aria-label={`${label}: ${current?.label ?? ""}`}
         disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => (open ? close() : openMenu())}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
-            setOpen(true);
+            if (!open) openMenu();
           }
         }}
         className={
@@ -170,17 +176,16 @@ export function SelectMenu<T extends string>({
           }`}
         >
           {options.map((option, index) => {
-            const selected = option.value === value;
+            const selected = index === selectedIndex;
             const highlighted = index === active;
             return (
-              <button
+              <div
                 key={option.value}
-                type="button"
                 role="option"
                 aria-selected={selected}
                 onMouseEnter={() => setActive(index)}
                 onClick={() => choose(index)}
-                className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                   highlighted ? "bg-[#191d23] text-paper" : "text-mute"
                 } ${selected ? "text-paper" : ""}`}
               >
@@ -190,7 +195,7 @@ export function SelectMenu<T extends string>({
                     ✓
                   </span>
                 ) : null}
-              </button>
+              </div>
             );
           })}
         </div>
