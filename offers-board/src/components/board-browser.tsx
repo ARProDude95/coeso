@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { OfferCard } from "@/components/offer-card";
+import { SelectMenu } from "@/components/select-menu";
 import {
   SORT_LABELS,
   filterAndSortOffers,
@@ -170,21 +171,16 @@ export function BoardBrowser({ offers }: { offers: Offer[] }) {
             className="field flex-1"
           />
           <div className="shrink-0">
-            <label className="sr-only" htmlFor="board-sort">
-              Sort offers
-            </label>
-            <select
-              id="board-sort"
+            <SelectMenu
+              label="Sort offers"
               value={sort}
-              onChange={(event) => setSort(event.target.value as Sort)}
-              className="field h-full w-auto pr-8"
-            >
-              {(Object.keys(SORT_LABELS) as Sort[]).map((key) => (
-                <option key={key} value={key}>
-                  {SORT_LABELS[key]}
-                </option>
-              ))}
-            </select>
+              onChange={setSort}
+              options={(Object.keys(SORT_LABELS) as Sort[]).map((key) => ({
+                value: key,
+                label: SORT_LABELS[key],
+              }))}
+              className="w-auto"
+            />
           </div>
         </div>
 

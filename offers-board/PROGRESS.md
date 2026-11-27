@@ -174,3 +174,17 @@
   needed on Workers) with explicit width/height, replacing the typed COESO.
 - **Checks:** typecheck clean; production `/login` serves the img tag and
   `/coeso-logo.png` returns 200 `image/png`. Not reviewed in a browser.
+
+### Offers Board — sort control in the board's own palette ✅
+
+- **Symptom:** the sort control was a native `<select>`, so the open menu was
+  drawn by the OS: white panel, blue highlight, ignoring the dark board.
+- **Fix:** `components/select-menu.tsx`, a listbox button + panel styled with
+  the board's line/coal/paper/ember tokens, an ember chevron that flips when
+  open, a hover/active row and an ember tick on the current choice.
+- **Behaviour:** listbox roles, arrows, Home/End, Enter/Space to choose,
+  Escape closes and returns focus, click outside closes, opens on the current
+  value, scrolls the active row into view.
+- **Checks:** typecheck clean; production `/offers` serves
+  `aria-label="Sort offers: Newest first"` and no `<select id="board-sort">`.
+  Keyboard and pointer behaviour not exercised in a browser.
