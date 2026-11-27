@@ -44,6 +44,8 @@ export async function POST(
     );
   }
 
+  // null means the unique index rejected a second row: another tab or a repeat
+  // double-submit got there first, so the member sees the same message.
   const application = await createApplication(
     {
       offer_id: id,
@@ -56,6 +58,10 @@ export async function POST(
     },
     { id: session.id, username: session.username },
   );
+
+  if (!application) {
+    return NextResponse.json({ error: "already_applied" }, { status: 409 });
+  }
 
   await notifyNewApplication({
     application,

@@ -112,6 +112,15 @@ const INDEXES = [
   `CREATE UNIQUE INDEX IF NOT EXISTS accounts_username_idx ON accounts (lower(username))`,
 ];
 
+/**
+ * A member may hold only one application per offer. account_id is nullable on
+ * rows that predate member applications, so the index is partial.
+ */
+const UNIQUE_INDEXES = [
+  `CREATE UNIQUE INDEX IF NOT EXISTS applications_offer_account_idx
+     ON applications (offer_id, account_id) WHERE account_id IS NOT NULL`,
+];
+
 const DEMO_OFFERS: Array<{
   title: string;
   company: string;
@@ -210,6 +219,38 @@ async function ensureReady(): Promise<void> {
   await ready;
 }
 
+/**
+ * The API refuses a second application, but two tabs submitting at the same
+ * moment can both pass that check, so a unique index is the real guard. Any
+ * duplicates that predate the index are collapsed onto the earliest one first —
+ * once, recorded in settings — so the index can be created.
+ */
+async function collapseDuplicateApplications(db: Db): Promise<void> {
+  const marker = "applications_unique_v1";
+  const marked = await db.query(
+    "SELECT value FROM settings WHERE key = ? LIMIT 1",
+    [marker],
+  );
+  if (marked.rows.length > 0) return;
+
+  await db.query(
+    `DELETE FROM applications
+      WHERE account_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM applications earlier
+           WHERE earlier.offer_id = applications.offer_id
+             AND earlier.account_id = applications.account_id
+             AND (earlier.created_at < applications.created_at
+                  OR (earlier.created_at = applications.created_at
+                      AND earlier.id < applications.id))
+        )`,
+  );
+  await db.query(
+    "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
+    [marker, new Date().toISOString(), new Date().toISOString()],
+  );
+}
+
 async function bootstrap(): Promise<void> {
   const db = await getDb();
   for (const statement of TABLES) {
@@ -219,6 +260,12 @@ async function bootstrap(): Promise<void> {
   await migrate(db);
 
   for (const statement of INDEXES) {
+    await db.query(statement);
+  }
+
+  await collapseDuplicateApplications(db);
+
+  for (const statement of UNIQUE_INDEXES) {
     await db.query(statement);
   }
 
@@ -428,31 +475,42 @@ export async function setOfferStatus(
 export async function createApplication(
   input: ApplicationInput,
   account: { id: string; username: string },
-): Promise<Application> {
+): Promise<Application | null> {
   await ensureReady();
   const db = await getDb();
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
-  await db.query(
-    `INSERT INTO applications (
+  try {
+    await db.query(
+      `INSERT INTO applications (
        id, offer_id, name, email, discord, experience, availability_hours,
        message, status, account_id, account_username, created_at
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
-    [
-      id,
-      input.offer_id,
-      input.name,
-      input.email,
-      input.discord,
-      input.experience,
-      input.availability_hours,
-      input.message,
-      account.id,
-      account.username,
-      createdAt,
-    ],
-  );
+      [
+        id,
+        input.offer_id,
+        input.name,
+        input.email,
+        input.discord,
+        input.experience,
+        input.availability_hours,
+        input.message,
+        account.id,
+        account.username,
+        createdAt,
+      ],
+    );
+  } catch (error) {
+    // Losing the race to the unique index means the row already exists.
+    if (
+      error instanceof Error &&
+      /UNIQUE constraint failed/i.test(error.message)
+    ) {
+      return null;
+    }
+    throw error;
+  }
 
   return {
     id,

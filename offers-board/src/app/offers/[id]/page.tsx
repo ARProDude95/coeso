@@ -116,7 +116,17 @@ export default async function OfferPage({
                   Coeso’s Owner has your application for this offer and will
                   reply to the email you gave. Message{" "}
                   <span className="font-mono text-ember">a1rymn</span> on Discord
-                  if you want to add anything.
+                  if you want to add anything. See where it stands under{" "}
+                  <Link
+                    href="/applications"
+                    className="text-ember underline underline-offset-4"
+                  >
+                    My applications
+                  </Link>
+                  .
+                </p>
+                <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.2em] text-mute">
+                  One application per member, per offer.
                 </p>
               </>
             ) : offer.status === "open" ? (

@@ -216,3 +216,23 @@
   expected filename, BOM and header row; viewer and signed-out requests get
   401 on both routes; `/admin` shows the snapshot time; the JSON download
   parses with matching counts and contains no `pbkdf2` hash.
+
+### Offers Board — one application per member per offer, enforced ✅
+
+- **Before:** the apply route checked for an existing application and the
+  offer page swapped the form for "Application received", but two tabs
+  submitting at once could both pass the check and insert two rows.
+- **Now:** a partial unique index on `(offer_id, account_id)` is the real
+  guard. `createApplication` returns null when the index rejects the row and
+  the route answers `409 already_applied`, the same message the pre-check
+  gives, so a double submit is indistinguishable from a late second attempt.
+- **Existing data:** duplicates are collapsed onto the earliest application
+  once, recorded under the `applications_unique_v1` settings key, before the
+  index is created.
+- **Copy:** the offer page's applied panel now links to My applications and
+  states the one-application rule.
+- **Checks:** typecheck clean. On production, with throwaway offers and a
+  viewer: sequential second apply 409, two simultaneous applies gave one 201
+  and one 409, the offer page showed the applied state with no form. Test
+  offers were deleted afterwards and the board is back to its prior state
+  (0 applications, CSV 0 rows).
