@@ -188,3 +188,13 @@
 - **Checks:** typecheck clean; production `/offers` serves
   `aria-label="Sort offers: Newest first"` and no `<select id="board-sort">`.
   Keyboard and pointer behaviour not exercised in a browser.
+
+### Offers Board — no more "ADMIN ADMIN" in the nav ✅
+
+- **Symptom:** the nav showed the admin link and the signed-in username side
+  by side, and the nav uppercases its items — so an admin account called
+  `admin` read as two identical ADMINs.
+- **Fix:** the admin link is now labelled "Control room", matching the page
+  heading it opens, so the nav reads Control room · admin.
+- **Checks:** typecheck clean; production `/offers` and `/admin` nav text is
+  `Coeso Board My applications Control room admin Sign out` for an admin.

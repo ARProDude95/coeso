@@ -48,9 +48,12 @@ export default async function RootLayout({
                   <Link href="/applications" className="hover:text-paper">
                     My applications
                   </Link>
+                  {/* "Control room" not "Admin": the signed-in username sits
+                      right beside this link and the nav is uppercased, so an
+                      admin account called admin read "ADMIN ADMIN". */}
                   {session.role === "admin" ? (
                     <Link href="/admin" className="hover:text-paper">
-                      Admin
+                      Control room
                     </Link>
                   ) : null}
                   <span className="hidden text-paper/70 sm:inline">
