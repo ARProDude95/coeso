@@ -16,12 +16,19 @@ export async function POST() {
     return NextResponse.json({ error: "not_configured" }, { status: 400 });
   }
 
+  // Carry the same mention a real application would, so the test proves the
+  // ping and not just that the message arrived.
+  const mention = process.env.DISCORD_MENTION?.trim();
+
   const response = await fetch(webhook, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       username: "Coeso Offers Board",
-      content: "Test ping — Coeso Offers Board notifications are wired up.",
+      content: mention
+        ? `${mention} test ping — Coeso Offers Board notifications are wired up.`
+        : "Test ping — Coeso Offers Board notifications are wired up.",
+      ...(mention ? { allowed_mentions: { parse: ["roles", "users"] } } : {}),
     }),
   }).catch(() => null);
 
