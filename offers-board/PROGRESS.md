@@ -265,3 +265,15 @@
   on `/admin` calls it.
 - **Checks:** typecheck clean; deployed to production. DISCORD_WEBHOOK_URL is
   still unset on the site, so the control is hidden until the secret exists.
+
+### Offers Board — C monogram favicon and app icon ✅
+
+- **Built from the brand file, not a substitute font:** the first glyph of the
+  supplied wordmark is cropped at native resolution (202×226), keyed to alpha
+  and composited onto a square tile in the render's own charcoal (`#25333A`)
+  with the paper cream (`#F3EFE6`) for the letter.
+- **Files:** `src/app/icon.png` (512×512) and `src/app/apple-icon.png`
+  (180×180), which Next serves at `/icon.png` and `/apple-icon.png`.
+- **Checks:** typecheck clean; production serves both (200, `image/png`, 39,825
+  and 6,798 bytes) and the head carries
+  `<link rel="icon" ... sizes="512x512">` plus the apple-touch-icon link.
