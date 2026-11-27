@@ -97,3 +97,36 @@
 - **Not verified:** the real click-through (toast appearance, rollback on a
   forced network failure, clipboard contents in a browser) — HTTP and logic
   checks only, no browser automation.
+
+### Offers Board — owner lockout recovery ✅
+
+- **The gap:** the board has no sign-up and `seedAdmin()` only creates an admin
+  when the table has none, so losing the admin password was permanent. There was
+  no way back in short of editing D1 by hand.
+- **`lib/admin-reset.ts`:** one narrow recovery path. `POST
+  /api/auth/reset-admin` takes `{ token, password }`; the token must match
+  `ADMIN_RESET_TOKEN` from the environment (minimum 32 characters, compared
+  with SHA-256 + `timingSafeEqual`). With the variable unset the route answers
+  `404 not_found`, so a normal deployment has no reset surface at all.
+- **Single use:** on success the token's SHA-256 is written to a new `settings`
+  table under `admin_reset_used`, and that exact token is refused with 409 from
+  then on. A later reset needs a new token value. Nothing is stored in
+  plaintext, logged or returned.
+- **Which account:** `getRecoveryAdmin()` prefers the admin named by
+  `ADMIN_USERNAME`, falling back to the oldest admin — and it includes
+  *disabled* admins, since disabling the account is another way to lock out.
+  A successful reset re-enables the account and sets the new password.
+- **Responses:** `400 weak_password` (under 12 characters), `401
+  invalid_token` (after a 400ms delay), `404 not_found` (feature off), `409
+  already_used` / `no_admin`, `200 {ok, username}`. Every response is
+  `cache-control: no-store`.
+- **Checks:** `npm run typecheck` clean; OpenNext build clean. Local workerd
+  against a real D1 binding (`wrangler dev`, `.dev.vars`, no browser): wrong
+  token 401, short password 400, correct token 200, replay 409, new password
+  logs in 200, old password 401. With a second admin disabling the first: reset
+  returns `200 {username:"admin"}`, that account signs in again, `/admin` 200,
+  and its `active` flag is back to 1. Rows and accounts created for the test
+  were deleted; `.dev.vars` and both temp logs removed.
+- **Not verified:** a real lockout on production (the recovery path was never
+  exercised against the live admin, only locally with a throwaway admin), and
+  no browser review.

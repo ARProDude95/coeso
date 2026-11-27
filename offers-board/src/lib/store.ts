@@ -96,6 +96,11 @@ const TABLES = [
      account_username   TEXT NOT NULL DEFAULT '',
      created_at         TEXT NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS settings (
+     key        TEXT PRIMARY KEY,
+     value      TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   )`,
 ];
 
 // Indexes are created after the column migration below, so a database that
@@ -646,6 +651,62 @@ export async function markAccountLogin(id: string): Promise<void> {
     new Date().toISOString(),
     id,
   ]);
+}
+
+/**
+ * The admin account a lockout reset should rescue: the one named by
+ * ADMIN_USERNAME when it exists, otherwise the oldest admin (the bootstrap
+ * account). Disabled admins are included on purpose — a disabled account is one
+ * of the ways to get locked out.
+ */
+export async function getRecoveryAdmin(): Promise<Account | null> {
+  await ensureReady();
+  const db = await getDb();
+  const columns =
+    "id, username, role, active, created_at, last_login_at";
+
+  const preferred = process.env.ADMIN_USERNAME?.trim();
+  if (preferred) {
+    const byName = await db.query(
+      `SELECT ${columns} FROM accounts
+        WHERE role = 'admin' AND lower(username) = lower(?)
+        ORDER BY created_at ASC LIMIT 1`,
+      [preferred],
+    );
+    const row = byName.rows[0] as unknown as Account | undefined;
+    if (row) return row;
+  }
+
+  const result = await db.query(
+    `SELECT ${columns} FROM accounts
+      WHERE role = 'admin'
+      ORDER BY created_at ASC LIMIT 1`,
+  );
+  return (result.rows[0] as unknown as Account) ?? null;
+}
+
+/* ----------------------------- settings ----------------------------- */
+
+/** Small key/value store for one-off state, such as a spent reset token. */
+export async function getSetting(key: string): Promise<string | null> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query("SELECT value FROM settings WHERE key = ?", [
+    key,
+  ]);
+  const row = result.rows[0] as { value?: string } | undefined;
+  return row?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  await ensureReady();
+  const db = await getDb();
+  await db.query(
+    `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                                    updated_at = excluded.updated_at`,
+    [key, value, new Date().toISOString()],
+  );
 }
 
 /* ------------------------------- stats ------------------------------ */
