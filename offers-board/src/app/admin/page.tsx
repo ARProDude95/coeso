@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { OfferForm } from "@/components/offer-form";
 import { OffersTable } from "@/components/offers-table";
 import { getSession } from "@/lib/auth";
+import { ensureDailyBackup, lastBackupAt } from "@/lib/backup";
 import { notificationsConfigured } from "@/lib/notify";
 import {
   boardStats,
@@ -24,6 +25,15 @@ function formatDate(iso: string): string {
   });
 }
 
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default async function AdminPage() {
   const session = await getSession();
   if (session?.role !== "admin") redirect("/login");
@@ -34,6 +44,10 @@ export default async function AdminPage() {
     boardStats(),
     listAccounts(),
   ]);
+
+  // At most one snapshot a day: the backup happens while the owner is here.
+  const backup = await ensureDailyBackup();
+  const backedUpAt = await lastBackupAt();
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-12">
@@ -103,13 +117,36 @@ export default async function AdminPage() {
       </section>
 
       <section className="mt-12">
-        <h2 className="font-mono text-[10px] uppercase tracking-[0.25em] text-mute">
-          Applications ({applications.length})
-        </h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.25em] text-mute">
+            Applications ({applications.length})
+          </h2>
+          <div className="flex items-center gap-5 font-mono text-[10px] uppercase tracking-[0.22em]">
+            <a
+              href="/api/applications/export"
+              download
+              className="text-ember underline decoration-ember/40 underline-offset-4 hover:text-paper"
+            >
+              Download CSV
+            </a>
+            <a
+              href="/api/backup"
+              download
+              className="text-mute underline decoration-line underline-offset-4 hover:text-paper"
+            >
+              Full backup
+            </a>
+          </div>
+        </div>
         <p className="mt-2 text-xs text-mute">
           {notificationsConfigured()
             ? "Each new application is also posted to your Discord webhook."
             : "Set DISCORD_WEBHOOK_URL to get a Discord ping for every new application."}
+        </p>
+        <p className="mt-1 text-xs text-mute">
+          {backup.ok && backedUpAt
+            ? `Snapshot stored off the database: ${formatDateTime(backedUpAt)}. The last 14 daily snapshots are kept; take the full backup for a copy of your own.`
+            : "No snapshot stored yet — the backup bucket is not attached to this environment. Download the full backup instead."}
         </p>
         {applications.length === 0 ? (
           <p className="mt-4 text-sm text-mute">

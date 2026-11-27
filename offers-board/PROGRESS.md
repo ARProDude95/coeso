@@ -198,3 +198,21 @@
   heading it opens, so the nav reads Control room · admin.
 - **Checks:** typecheck clean; production `/offers` and `/admin` nav text is
   `Coeso Board My applications Control room admin Sign out` for an admin.
+
+### Offers Board — applications can leave the database ✅
+
+- **CSV export:** `GET /api/applications/export`, admin only, downloads every
+  application (no row limit) with a UTF-8 BOM and CRLF so Excel opens it
+  cleanly. Cells are quoted and a leading `=`, `+`, `-` or `@` is prefixed
+  with an apostrophe so member text cannot act as a spreadsheet formula.
+- **Backup:** `lib/backup.ts` snapshots offers, applications and accounts
+  (no password hashes) as JSON into the site's R2 bucket, once a day at most,
+  triggered when an admin opens `/admin`; the newest 14 are kept and older
+  ones are pruned. `GET /api/backup` returns the same snapshot as a download
+  for a copy off the platform, and also refreshes the stored one.
+- **Infra:** R2 binding `FILES` provisioned for preview and production and
+  attached by deploying.
+- **Checks:** typecheck clean; production CSV returns 200 `text/csv` with the
+  expected filename, BOM and header row; viewer and signed-out requests get
+  401 on both routes; `/admin` shows the snapshot time; the JSON download
+  parses with matching counts and contains no `pbkdf2` hash.

@@ -540,6 +540,23 @@ export async function listApplications(): Promise<Application[]> {
   return result.rows as unknown as Application[];
 }
 
+/**
+ * Every application, with no row limit: the CSV export and the backup must be
+ * complete, unlike the list the admin page renders.
+ */
+export async function listAllApplications(): Promise<Application[]> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    `SELECT a.*, o.title AS offer_title, o.company AS offer_company,
+            o.status AS offer_status, o.commission AS offer_commission
+       FROM applications a
+       JOIN offers o ON o.id = a.offer_id
+      ORDER BY a.created_at DESC`,
+  );
+  return result.rows as unknown as Application[];
+}
+
 /* ----------------------------- accounts ----------------------------- */
 
 export async function listAccounts(): Promise<Account[]> {
