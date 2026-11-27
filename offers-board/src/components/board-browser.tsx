@@ -39,7 +39,14 @@ function writeIds(key: string, ids: string[]): void {
   }
 }
 
-export function BoardBrowser({ offers }: { offers: Offer[] }) {
+export function BoardBrowser({
+  offers,
+  appliedOfferIds = [],
+}: {
+  offers: Offer[];
+  /** Offers this member already applied to, so cards can say so. */
+  appliedOfferIds?: string[];
+}) {
   const [q, setQ] = useState("");
   const [roles, setRoles] = useState<RoleFilter[]>([]);
   const [pays, setPays] = useState<string[]>([]);
@@ -378,6 +385,7 @@ export function BoardBrowser({ offers }: { offers: Offer[] }) {
               <OfferCard
                 key={offer.id}
                 offer={offer}
+                applied={appliedOfferIds.includes(offer.id)}
                 shortlisted={shortlist.includes(offer.id)}
                 compared={compare.includes(offer.id)}
                 compareDisabled={compare.length >= COMPARE_LIMIT}

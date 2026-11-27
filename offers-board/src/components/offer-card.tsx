@@ -11,6 +11,7 @@ import type { Offer } from "@/lib/store";
  */
 export function OfferCard({
   offer,
+  applied = false,
   shortlisted,
   compared,
   compareDisabled,
@@ -18,6 +19,8 @@ export function OfferCard({
   onToggleCompare,
 }: {
   offer: Offer;
+  /** The member already has an application for this offer. */
+  applied?: boolean;
   shortlisted: boolean;
   compared: boolean;
   compareDisabled: boolean;
@@ -42,6 +45,11 @@ export function OfferCard({
           {offer.featured ? (
             <span className="rounded-full bg-ember px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.2em] text-ink">
               Featured
+            </span>
+          ) : null}
+          {applied ? (
+            <span className="pill border-ember/50 py-0.5 text-ember">
+              ✓ Applied
             </span>
           ) : null}
           {fresh ? (

@@ -10,6 +10,7 @@ import { getSession } from "@/lib/auth";
 import { ensureDailyBackup, lastBackupAt } from "@/lib/backup";
 import { notificationsConfigured } from "@/lib/notify";
 import {
+  applicationCountsByOffer,
   boardStats,
   listAccounts,
   listApplications,
@@ -38,11 +39,12 @@ export default async function AdminPage() {
   const session = await getSession();
   if (session?.role !== "admin") redirect("/login");
 
-  const [offers, applications, stats, accounts] = await Promise.all([
+  const [offers, applications, stats, accounts, counts] = await Promise.all([
     listOffers({ includeClosed: true }),
     listApplications(),
     boardStats(),
     listAccounts(),
+    applicationCountsByOffer(),
   ]);
 
   // At most one snapshot a day: the backup happens while the owner is here.
@@ -99,7 +101,7 @@ export default async function AdminPage() {
         <h2 className="font-mono text-[10px] uppercase tracking-[0.25em] text-mute">
           Offers ({offers.length})
         </h2>
-        <OffersTable offers={offers} />
+                  <OffersTable offers={offers} counts={counts} />
       </section>
 
       <section className="mt-12">

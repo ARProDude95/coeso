@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SelectMenu } from "@/components/select-menu";
 import { useToast } from "@/components/toast";
 import type { ApplicationStatus as Status } from "@/lib/store";
 
@@ -70,19 +71,14 @@ export function ApplicationStatus({
 
   return (
     <div className="flex flex-col items-start gap-1">
-      <select
+      <SelectMenu
+        label="Application status"
         value={current}
-        onChange={(event) => update(event.target.value as Status)}
+        options={OPTIONS.map(({ value, label }) => ({ value, label }))}
+        onChange={update}
         disabled={busy}
-        aria-label="Application status"
-        className="rounded-md border border-line bg-coal px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-paper disabled:opacity-50"
-      >
-        {OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        bare
+      />
       {current === "hired" ? (
         <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-ember">
           offer closed

@@ -2,7 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { SelectMenu } from "@/components/select-menu";
 import type { Account } from "@/lib/store";
+
+const ROLE_OPTIONS: Array<{ value: Account["role"]; label: string }> = [
+  { value: "viewer", label: "Viewer — board only" },
+  { value: "admin", label: "Admin — full control" },
+];
 
 interface Credentials {
   username: string;
@@ -68,6 +74,7 @@ export function AccountsManager({
   const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [role, setRole] = useState<Account["role"]>("viewer");
   const [busyId, setBusyId] = useState("");
   const [created, setCreated] = useState<Credentials | null>(null);
   const [reset, setReset] = useState<Credentials | null>(null);
@@ -122,6 +129,7 @@ export function AccountsManager({
     }
 
     form.reset();
+    setRole("viewer");
     setCreated({
       username: payload.account.username,
       password: payload.password,
@@ -225,18 +233,14 @@ export function AccountsManager({
           />
         </div>
         <div>
-          <label className="label" htmlFor="account-role">
-            Access
-          </label>
-          <select
-            id="account-role"
-            name="role"
-            className="field"
-            defaultValue="viewer"
-          >
-            <option value="viewer">Viewer — board only</option>
-            <option value="admin">Admin — full control</option>
-          </select>
+          <span className="label">Access</span>
+          <input type="hidden" name="role" value={role} />
+          <SelectMenu
+            label="Access"
+            value={role}
+            options={ROLE_OPTIONS}
+            onChange={setRole}
+          />
         </div>
         <button type="submit" className="btn btn-primary" disabled={busy}>
           {busy ? "Creating…" : "Create account"}

@@ -528,6 +528,35 @@ export async function createApplication(
   };
 }
 
+/** Offer ids this member has applied to: one query for the whole board. */
+export async function listAppliedOfferIds(
+  accountId: string,
+): Promise<string[]> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "SELECT offer_id FROM applications WHERE account_id = ?",
+    [accountId],
+  );
+  return result.rows.map((row) => String((row as { offer_id: unknown }).offer_id));
+}
+
+/** How many applications each offer has, keyed by offer id. */
+export async function applicationCountsByOffer(): Promise<
+  Record<string, number>
+> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "SELECT offer_id, COUNT(*) AS count FROM applications GROUP BY offer_id",
+  );
+  const counts: Record<string, number> = {};
+  for (const row of result.rows as Array<{ offer_id: string; count: number }>) {
+    counts[row.offer_id] = Number(row.count);
+  }
+  return counts;
+}
+
 /** Whether this account already applied to this offer. */
 export async function hasAppliedForOffer(
   offerId: string,

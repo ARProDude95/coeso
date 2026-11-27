@@ -236,3 +236,21 @@
   and one 409, the offer page showed the applied state with no form. Test
   offers were deleted afterwards and the board is back to its prior state
   (0 applications, CSV 0 rows).
+
+### Offers Board — applied state, per-offer counts, one dropdown everywhere ✅
+
+- **Board:** offer cards show a `✓ Applied` chip when the member already has
+  an application for that offer. The page loads the member's applied offer ids
+  in one query and passes them to the browser component.
+- **Admin:** the offers table gains an Applications column (per-offer count,
+  `—` when zero) from a single grouped query.
+- **UI:** the three remaining native selects (offer role type, account access,
+  application status) now use `SelectMenu`, so no OS-drawn popup is left.
+  The component grew a `bare` compact trigger and a `disabled` state, and the
+  two form selects keep submitting through hidden inputs.
+- **Loading:** `PageSkeleton` plus `loading.tsx` for `/offers`, `/admin` and
+  `/applications`, so a slow D1 read shows the page shape instead of a blank.
+- **Checks:** typecheck clean; on production a throwaway offer and application
+  produced the applied chip on the board, `Applications` column with count 1,
+  and 3 listbox controls + the hidden role input on `/admin`. Test offer
+  deleted afterwards; the board is back to its prior state.

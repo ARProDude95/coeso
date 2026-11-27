@@ -2,12 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { SelectMenu } from "@/components/select-menu";
 import type { Offer } from "@/lib/store";
+
+const ROLE_OPTIONS: Array<{ value: Offer["role_type"]; label: string }> = [
+  { value: "setter", label: "Setter" },
+  { value: "closer", label: "Closer" },
+  { value: "both", label: "Full cycle" },
+];
 
 export function OfferForm({ offer }: { offer?: Offer }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const [role, setRole] = useState<Offer["role_type"]>(
+    offer?.role_type ?? "closer",
+  );
 
   const editing = Boolean(offer);
 
@@ -50,7 +60,10 @@ export function OfferForm({ offer }: { offer?: Offer }) {
       return;
     }
 
-    if (!editing) form.reset();
+    if (!editing) {
+      form.reset();
+      setRole("closer");
+    }
     setSending(false);
     router.refresh();
     if (editing) router.push("/admin");
@@ -86,19 +99,14 @@ export function OfferForm({ offer }: { offer?: Offer }) {
         />
       </div>
       <div>
-        <label className="label" htmlFor="offer-role">
-          Role type
-        </label>
-        <select
-          id="offer-role"
-          name="role_type"
-          className="field"
-          defaultValue={offer?.role_type ?? "closer"}
-        >
-          <option value="setter">Setter</option>
-          <option value="closer">Closer</option>
-          <option value="both">Full cycle</option>
-        </select>
+        <span className="label">Role type</span>
+        <input type="hidden" name="role_type" value={role} />
+        <SelectMenu
+          label="Role type"
+          value={role}
+          options={ROLE_OPTIONS}
+          onChange={setRole}
+        />
       </div>
       <div>
         <label className="label" htmlFor="offer-commission">

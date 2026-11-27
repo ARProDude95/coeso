@@ -15,6 +15,9 @@ interface SelectMenuProps<T extends string> {
   onChange: (value: T) => void;
   /** Applied to the trigger so callers can size it for their layout. */
   className?: string;
+  /** Compact trigger for dense places like a table cell. */
+  bare?: boolean;
+  disabled?: boolean;
 }
 
 /**
@@ -30,6 +33,8 @@ export function SelectMenu<T extends string>({
   options,
   onChange,
   className = "",
+  bare = false,
+  disabled = false,
 }: SelectMenuProps<T>) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -121,6 +126,7 @@ export function SelectMenu<T extends string>({
         aria-expanded={open}
         aria-controls={open ? `${id}-list` : undefined}
         aria-label={`${label}: ${current?.label ?? ""}`}
+        disabled={disabled}
         onClick={() => setOpen((value) => !value)}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -128,7 +134,11 @@ export function SelectMenu<T extends string>({
             setOpen(true);
           }
         }}
-        className={`field flex h-full items-center justify-between gap-3 pr-2.5 text-left whitespace-nowrap ${className}`}
+        className={
+          bare
+            ? "inline-flex items-center gap-2 rounded-md border border-line bg-coal px-2 py-1 text-left font-mono text-[10px] uppercase tracking-[0.18em] text-paper disabled:opacity-50"
+            : `field flex h-full items-center justify-between gap-3 pr-2.5 text-left whitespace-nowrap ${className}`
+        }
       >
         <span>{current?.label}</span>
         <svg
@@ -155,7 +165,9 @@ export function SelectMenu<T extends string>({
           aria-labelledby={`${id}-trigger`}
           tabIndex={-1}
           onKeyDown={onListKeyDown}
-          className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-line bg-[#0b0d10] p-1 shadow-[0_20px_45px_-15px_rgba(0,0,0,0.95)] outline-none"
+          className={`absolute right-0 z-30 mt-2 overflow-hidden rounded-xl border border-line bg-[#0b0d10] p-1 shadow-[0_20px_45px_-15px_rgba(0,0,0,0.95)] outline-none ${
+            bare ? "w-44" : "w-60"
+          }`}
         >
           {options.map((option, index) => {
             const selected = option.value === value;

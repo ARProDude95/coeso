@@ -17,7 +17,14 @@ function formatDate(iso: string): string {
  * immediately and only roll back if the request fails, so the page never
  * reloads under the owner's cursor.
  */
-export function OffersTable({ offers }: { offers: Offer[] }) {
+export function OffersTable({
+  offers,
+  counts = {},
+}: {
+  offers: Offer[];
+  /** Applications per offer id, so the table shows which offers are working. */
+  counts?: Record<string, number>;
+}) {
   const toast = useToast();
   const [rows, setRows] = useState<Offer[]>(offers);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -116,6 +123,7 @@ export function OffersTable({ offers }: { offers: Offer[] }) {
             <th className="px-4 py-3">Company</th>
             <th className="px-4 py-3">Role</th>
             <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Applications</th>
             <th className="px-4 py-3">Posted</th>
             <th className="px-4 py-3 text-right">Actions</th>
           </tr>
@@ -149,6 +157,13 @@ export function OffersTable({ offers }: { offers: Offer[] }) {
                   >
                     {offer.status}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  {(counts[offer.id] ?? 0) === 0 ? (
+                    <span className="text-mute">—</span>
+                  ) : (
+                    <span className="text-paper">{counts[offer.id]}</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-mute">
                   {formatDate(offer.created_at)}

@@ -1,10 +1,16 @@
 import { BoardBrowser } from "@/components/board-browser";
-import { boardStats, listOffers } from "@/lib/store";
+import { getSession } from "@/lib/auth";
+import { boardStats, listAppliedOfferIds, listOffers } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export default async function BoardPage() {
-  const [offers, stats] = await Promise.all([listOffers({}), boardStats()]);
+  const session = await getSession();
+  const [offers, stats, appliedOfferIds] = await Promise.all([
+    listOffers({}),
+    boardStats(),
+    session ? listAppliedOfferIds(session.id) : Promise.resolve([]),
+  ]);
 
   return (
     <main className="mx-auto max-w-6xl px-5">
@@ -45,7 +51,7 @@ export default async function BoardPage() {
         </dl>
       </section>
 
-      <BoardBrowser offers={offers} />
+      <BoardBrowser offers={offers} appliedOfferIds={appliedOfferIds} />
     </main>
   );
 }
