@@ -180,6 +180,45 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* --- hero ----------------------------------------------------------- */
+
+/* A slow halo behind the live dot. Decorative only: it sits in a
+   pointer-events-none span and stops entirely for reduced motion. */
+.pulse-dot {
+  position: relative;
+}
+
+.pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ember) 60%, transparent);
+  animation: pulse-halo 2.8s ease-out infinite;
+}
+
+@keyframes pulse-halo {
+  0% {
+    transform: scale(0.45);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* --- loading skeletons ---------------------------------------------- */
 
 .skeleton {

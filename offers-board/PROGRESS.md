@@ -285,3 +285,11 @@
 - **Panel measured against the deployed stylesheet:** 375px — 240px wide, left edge 98px, right 338px, all four corners hit-test to the panel; 320px — left edge 43px, still inside the viewport. The sticky bar declares no `overflow`, and nothing between the panel and `<html>` clips, so the open list paints over the cards below it. The bar’s `z-10` stacking context stays under the header’s `z-20`, but the panel only opens downward and never reaches the header.
 - **Found while checking, not fixed:** `/offers` never leaves its `Loading…` skeleton in a browser. The streamed board sits hidden in `<div hidden id="S:0">` and the route-level loading UI is never replaced, while the same HTML arrives complete over curl in 8s — so it is client-side.
 - **Checks:** `bun run typecheck` clean. Not deployed.
+
+### Offers Board — hero takes the empty space, keeps the palette ✅
+
+- **The top of the board is now a section, not a title:** warm radial light and a hairline grid fading out behind the headline, an invite / vetted / open-roles pill row, three accent-topped stat tiles (open offers in ember, the rest in paper, each with a footnote), and a live “newest on the board” card that links to the newest open offer with its commission set in ember.
+- **New band under it:** three hairline-divided coal cells — See the real split / Apply in a minute / One answer, tracked — so the fold is not just padding between the stats and the filters.
+- **Mobile fixes found while checking:** the “Applications” label overflowed a 3-up tile at 390px, so the tiles collapse to label-left / number-right rows; and the featured card truncated “18% of contract value…” next to the CTA, so the commission now sits on its own line with the CTA beneath it.
+- **Colour stays inside the brand:** ember on ink/coal/line with paper type, no new hues. The live dot gets a slow `.pulse-dot` halo in `globals.css`, switched off under `prefers-reduced-motion`.
+- **Checks:** `bun run build` and typecheck clean. Harness against the built stylesheet — 1280px: three 185px tiles, labels above numbers, footnotes visible; 390px: single column, labels fit, commission renders in full, no horizontal overflow at either width. Not deployed.
