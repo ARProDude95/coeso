@@ -164,3 +164,13 @@
   `/offers` 200, `/admin` 307, and each account's previous password now
   returns 401. A 5-character password is rejected with 400 before anything
   is hashed. Passwords are deliberately not recorded in this file.
+
+### Offers Board — supplied Coeso logo in the header ✅
+
+- **Asset:** `public/coeso-logo.png` — the supplied square render, trimmed to
+  the wordmark, background keyed to transparency and recoloured to the board's
+  paper tone, exported at 525×120 for a 20px-tall header slot.
+- **Use:** `app/layout.tsx` renders it as a plain `<img>` (no image optimiser
+  needed on Workers) with explicit width/height, replacing the typed COESO.
+- **Checks:** typecheck clean; production `/login` serves the img tag and
+  `/coeso-logo.png` returns 200 `image/png`. Not reviewed in a browser.

@@ -21,10 +21,17 @@ export default async function RootLayout({
       <body className="min-h-screen">
         <header className="sticky top-0 z-20 border-b border-line bg-ink/85 backdrop-blur">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
-            <Link href="/offers" className="group flex items-baseline gap-3">
-              <span className="font-display text-xl tracking-[0.18em]">
-                COESO
-              </span>
+            <Link href="/offers" className="group flex items-center gap-3">
+              {/* Wordmark: the supplied logo, trimmed and keyed to sit on any
+                  background. Rendered as a plain img so no image optimiser is
+                  needed on the Workers runtime. */}
+              <img
+                src="/coeso-logo.png"
+                alt="Coeso"
+                width={525}
+                height={120}
+                className="h-5 w-auto"
+              />
               <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-mute transition group-hover:text-ember">
                 Offers Board
               </span>
