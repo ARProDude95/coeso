@@ -4,6 +4,7 @@ import { AccountsManager } from "@/components/accounts-manager";
 import { ApplicationStatus } from "@/components/application-status";
 import { CopyApplication } from "@/components/copy-application";
 import { LogoutButton } from "@/components/logout-button";
+import { NotifyTest } from "@/components/notify-test";
 import { OfferForm } from "@/components/offer-form";
 import { OffersTable } from "@/components/offers-table";
 import { getSession } from "@/lib/auth";
@@ -140,10 +141,11 @@ export default async function AdminPage() {
             </a>
           </div>
         </div>
-        <p className="mt-2 text-xs text-mute">
+        <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-mute">
           {notificationsConfigured()
             ? "Each new application is also posted to your Discord webhook."
             : "Set DISCORD_WEBHOOK_URL to get a Discord ping for every new application."}
+          {notificationsConfigured() ? <NotifyTest /> : null}
         </p>
         <p className="mt-1 text-xs text-mute">
           {backup.ok && backedUpAt

@@ -254,3 +254,14 @@
   produced the applied chip on the board, `Applications` column with count 1,
   and 3 listbox controls + the hidden role input on `/admin`. Test offer
   deleted afterwards; the board is back to its prior state.
+
+### Offers Board — prove the Discord webhook actually delivers ✅
+
+- **Why:** notifications are deliberately best-effort, so a wrong or expired
+  webhook URL fails silently — an application is saved and nobody is pinged.
+- **Added:** `POST /api/notify/test`, admin only, posts one message to the
+  configured webhook and returns only Discord's status code (the URL is never
+  returned or logged). A "Send test ping" control next to the Discord line
+  on `/admin` calls it.
+- **Checks:** typecheck clean; deployed to production. DISCORD_WEBHOOK_URL is
+  still unset on the site, so the control is hidden until the secret exists.
