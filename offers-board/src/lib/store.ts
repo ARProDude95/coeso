@@ -43,6 +43,13 @@ export interface Application {
   status: ApplicationStatus;
   account_id: string | null;
   account_username: string;
+  /** Joined from the applicant's profile; null when they never filled one in. */
+  profile_headline?: string | null;
+  profile_location?: string | null;
+  profile_skills?: string | null;
+  profile_bio?: string | null;
+  profile_loom_url?: string | null;
+  profile_website_url?: string | null;
   created_at: string;
 }
 
@@ -663,9 +670,16 @@ export async function listApplications(): Promise<Application[]> {
   await ensureReady();
   const db = await getDb();
   const result = await db.query(
-    `SELECT a.*, o.title AS offer_title
+    `SELECT a.*, o.title AS offer_title,
+            p.headline    AS profile_headline,
+            p.location    AS profile_location,
+            p.skills      AS profile_skills,
+            p.bio         AS profile_bio,
+            p.loom_url    AS profile_loom_url,
+            p.website_url AS profile_website_url
        FROM applications a
        JOIN offers o ON o.id = a.offer_id
+       LEFT JOIN profiles p ON p.account_id = a.account_id
       ORDER BY a.created_at DESC
       LIMIT 300`,
   );

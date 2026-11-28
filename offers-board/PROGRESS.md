@@ -373,3 +373,10 @@
 - **Storage:** a `profiles` table keyed by `account_id`, created by the existing bootstrap, so a live database picks it up on its first request. The row is written only for the signed-in account — `PATCH /api/profile` takes the id from the session and never from the body, so one member cannot edit another's profile.
 - **Validation:** `profileInput` caps every field (bio 1200, experience 3000, skills 300), and links accept `loom.com/share/abc` without a scheme — `https://` is added — while anything that still is not a host is refused with the field named in the error.
 - **Checked:** typecheck and `bun run build` are clean (the new route appears as `ƒ /profile`), and against the local D1 a real login, a save and a reload showed the headline, skill pills, experience line and Loom button rendered from the saved row; signed out the page redirects to `/login` (307) and an unauthenticated save is refused (401).
+
+### Offers Board — the applicant's profile sits on the applications table ✅
+
+- **Where:** the Member column of `/admin` now carries the applicant's profile under their name — headline, `@username · location`, up to eight skill pills, a three-line bio, and Loom / website links. Nothing is replaced: the application's own name, note, email, Discord, offer and hours stay where they were.
+- **Read path:** `listApplications()` gained a `LEFT JOIN profiles p ON p.account_id = a.account_id`, so the table still fills from one query and no per-row profile fetch is needed. Applications from before member accounts have no account and read "No member account"; members who never filled a profile read "No profile filled in".
+- **Read-only:** the owner cannot edit a member's profile from here — `profiles` is written only by `PATCH /api/profile` for the signed-in account.
+- **Checked:** the join was run against an in-memory database with one profiled member and one guest application (aliases arrive as expected, the guest's profile columns are null); `bun run typecheck` and `bun run build` are clean. No browser review of the admin table was done.

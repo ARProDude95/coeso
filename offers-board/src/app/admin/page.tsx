@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AccountsManager } from "@/components/accounts-manager";
+import { ApplicantProfile } from "@/components/applicant-profile";
 import { ApplicationStatus } from "@/components/application-status";
 import { CopyApplication } from "@/components/copy-application";
 import { LogoutButton } from "@/components/logout-button";
@@ -252,8 +253,9 @@ export default async function AdminPage() {
               <tbody className="divide-y divide-line">
                 {applications.map((application) => (
                   <tr key={application.id}>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-top">
                       <span className="font-mono">{application.name}</span>
+                      <ApplicantProfile application={application} />
                       {application.message ? (
                         <p className="mt-1 max-w-xs text-xs leading-relaxed text-mute">
                           {application.message}
