@@ -643,6 +643,24 @@ export async function listApplications(): Promise<Application[]> {
 }
 
 /**
+ * Applications nobody has picked up yet (`new`). The admin actions that push
+ * to Discord work from this list, so a status change is what "seen" means.
+ */
+export async function listUnreadApplications(): Promise<Application[]> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    `SELECT a.*, o.title AS offer_title
+       FROM applications a
+       JOIN offers o ON o.id = a.offer_id
+      WHERE a.status = 'new'
+      ORDER BY a.created_at ASC
+      LIMIT 100`,
+  );
+  return result.rows as unknown as Application[];
+}
+
+/**
  * Every application, with no row limit: the CSV export and the backup must be
  * complete, unlike the list the admin page renders.
  */

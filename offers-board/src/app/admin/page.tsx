@@ -4,6 +4,7 @@ import { AccountsManager } from "@/components/accounts-manager";
 import { ApplicationStatus } from "@/components/application-status";
 import { CopyApplication } from "@/components/copy-application";
 import { LogoutButton } from "@/components/logout-button";
+import { NotifyBackfill } from "@/components/notify-backfill";
 import { NotifyTest } from "@/components/notify-test";
 import { OfferForm } from "@/components/offer-form";
 import { OffersTable } from "@/components/offers-table";
@@ -74,6 +75,11 @@ export default async function AdminPage() {
       Number.isFinite(posted) && Date.now() - posted > STALE_DAYS * 86_400_000
     );
   });
+
+  // Applications still marked `new`: the ones never announced on Discord.
+  const unread = applications.filter(
+    (application) => application.status === "new",
+  ).length;
 
   // At most one snapshot a day: the backup happens while the owner is here.
   const backup = await ensureDailyBackup();
@@ -213,6 +219,9 @@ export default async function AdminPage() {
           {notificationsConfigured()
             ? "Each new application is also posted to your Discord webhook."
             : "Set DISCORD_WEBHOOK_URL to get a Discord ping for every new application."}
+          {notificationsConfigured() && unread > 0 ? (
+            <NotifyBackfill unread={unread} />
+          ) : null}
           {notificationsConfigured() ? <NotifyTest /> : null}
         </p>
         <p className="mt-1 text-xs text-mute">

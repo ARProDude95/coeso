@@ -301,3 +301,11 @@
 - **What a reader sees:** the detail page lists “Applications close <date>” among its facts, then switches to the Closed pill and “Applications closed on <date>.” once the day has gone; a submit against a passed date returns 409 `closed`; the admin table tags each row `closes <date>` or an ember `date passed`.
 - **/admin “Needs attention”:** a live list of open offers past their closing day, plus open offers listed more than 14 days with no closing date — each with the reason it needs a decision and an Edit link.
 - **Checks:** `bun run typecheck` and `bun run build` clean. Not deployed, so the column reaches production on the next deploy.
+
+### Offers Board — one-off Discord catch-up for unread applications ✅
+
+- **Why:** notifications were switched on after Jordan's application had already landed, so the only record was a row in `/admin` that had never produced a ping. This is the backfill for everything that arrived while the webhook was unset.
+- **One button, no new flow:** `/admin` grows a “Push N unread to Discord” link next to the existing test ping, shown only when a webhook is configured and something is unread. It posts each still-`new` application as the same embed a live application produces — same fields, same role mention when one is set, with a line saying it was recovered from before notifications were on. Nothing on the apply path changed.
+- **Press it twice safely:** every application Discord has seen is recorded under the `discord_notified_v1` setting, by the live notify and by the backfill alike, so a second click only retries what failed and reports “N already sent” rather than duplicating cards.
+- **Server side:** `pushUnreadApplications()` in `notify.ts` walks `listUnreadApplications()` (the new store query for `status = 'new'`) and reports sent / skipped / failed; `POST /api/notify/backfill` is admin-only and answers 400 `not_configured` when there is no webhook, so a misconfigured deployment says so instead of failing silently.
+- **Checks:** `bun run typecheck` and `bun run build` clean, with `/api/notify/backfill` in the route list. Not exercised against Discord — there is no webhook value in this deployment yet, so the button cannot be pressed until one is set.
