@@ -64,6 +64,35 @@ export const accountInput = z.object({
   role: z.enum(["admin", "viewer"]).default("viewer"),
 });
 
+/**
+ * Profile links are typed by hand, so a bare `loom.com/share/abc` is accepted
+ * and given a scheme. Anything that still does not look like a host is refused.
+ */
+const profileLink = z
+  .string()
+  .trim()
+  .max(300)
+  .default("")
+  .transform((value) =>
+    value && !/^https?:\/\//i.test(value) ? `https://${value}` : value,
+  )
+  .refine(
+    (value) => value === "" || /^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(value),
+    "Use a link like loom.com/share/abc",
+  );
+
+export const profileInput = z.object({
+  display_name: z.string().trim().max(80).default(""),
+  headline: z.string().trim().max(120).default(""),
+  bio: z.string().trim().max(1200).default(""),
+  experience: z.string().trim().max(3000).default(""),
+  /** Comma-separated list; the page splits it into pills. */
+  skills: z.string().trim().max(300).default(""),
+  location: z.string().trim().max(80).default(""),
+  loom_url: profileLink,
+  website_url: profileLink,
+});
+
 export const applicationStatusInput = z.object({
   status: z.enum(["new", "reviewing", "shortlisted", "hired"]),
 });
@@ -72,3 +101,4 @@ export type OfferInput = z.infer<typeof offerInput>;
 export type ApplicationInput = z.infer<typeof applicationInput>;
 export type MemberApplicationInput = z.infer<typeof memberApplicationInput>;
 export type AccountInput = z.infer<typeof accountInput>;
+export type ProfileInput = z.infer<typeof profileInput>;

@@ -59,9 +59,15 @@ export default async function RootLayout({
                       Control room
                     </Link>
                   ) : null}
-                  <span className="hidden text-paper/70 sm:inline">
+                  {/* The username is the way into the member's own profile, so
+                      it stays visible on small screens too. */}
+                  <Link
+                    href="/profile"
+                    className="text-paper/70 hover:text-ember"
+                    title="Your profile"
+                  >
                     {session.username}
-                  </span>
+                  </Link>
                   <LogoutButton />
                 </>
               ) : (

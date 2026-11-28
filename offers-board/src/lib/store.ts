@@ -1,7 +1,11 @@
 import { getDb, type Db, type SqlValue } from "./db";
 import { todayIso } from "./offer-format";
 import { hashPassword } from "./password";
-import type { ApplicationInput, OfferInput } from "./validation";
+import type {
+  ApplicationInput,
+  OfferInput,
+  ProfileInput,
+} from "./validation";
 
 export type RoleType = "setter" | "closer" | "both";
 
@@ -55,6 +59,20 @@ export interface AccountWithPassword extends Account {
   password_hash: string;
 }
 
+export interface Profile {
+  account_id: string;
+  display_name: string;
+  headline: string;
+  bio: string;
+  experience: string;
+  /** Comma-separated; split for display. */
+  skills: string;
+  loom_url: string;
+  website_url: string;
+  location: string;
+  updated_at: string;
+}
+
 export interface BoardStats {
   open: number;
   total: number;
@@ -104,6 +122,18 @@ const TABLES = [
      key        TEXT PRIMARY KEY,
      value      TEXT NOT NULL,
      updated_at TEXT NOT NULL
+   )`,
+  `CREATE TABLE IF NOT EXISTS profiles (
+     account_id   TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+     display_name TEXT NOT NULL DEFAULT '',
+     headline     TEXT NOT NULL DEFAULT '',
+     bio          TEXT NOT NULL DEFAULT '',
+     experience   TEXT NOT NULL DEFAULT '',
+     skills       TEXT NOT NULL DEFAULT '',
+     loom_url     TEXT NOT NULL DEFAULT '',
+     website_url  TEXT NOT NULL DEFAULT '',
+     location     TEXT NOT NULL DEFAULT '',
+     updated_at   TEXT NOT NULL
    )`,
 ];
 
@@ -820,6 +850,65 @@ export async function getRecoveryAdmin(): Promise<Account | null> {
       ORDER BY created_at ASC LIMIT 1`,
   );
   return (result.rows[0] as unknown as Account) ?? null;
+}
+
+/* ------------------------------ profiles ----------------------------- */
+
+/** The signed-in member's own profile, or null before they fill it in. */
+export async function getProfile(accountId: string): Promise<Profile | null> {
+  await ensureReady();
+  const db = await getDb();
+  const result = await db.query(
+    "SELECT * FROM profiles WHERE account_id = ?",
+    [accountId],
+  );
+  return (result.rows[0] as unknown as Profile) ?? null;
+}
+
+/**
+ * Profiles are written only for the caller's own account, so the account id
+ * always comes from the session and never from the request body.
+ */
+export async function saveProfile(
+  accountId: string,
+  input: ProfileInput,
+): Promise<Profile> {
+  await ensureReady();
+  const db = await getDb();
+  const updatedAt = new Date().toISOString();
+
+  await db.query(
+    `INSERT INTO profiles (
+       account_id, display_name, headline, bio, experience, skills,
+       loom_url, website_url, location, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(account_id) DO UPDATE SET
+       display_name = excluded.display_name,
+       headline     = excluded.headline,
+       bio          = excluded.bio,
+       experience   = excluded.experience,
+       skills       = excluded.skills,
+       loom_url     = excluded.loom_url,
+       website_url  = excluded.website_url,
+       location     = excluded.location,
+       updated_at   = excluded.updated_at`,
+    [
+      accountId,
+      input.display_name,
+      input.headline,
+      input.bio,
+      input.experience,
+      input.skills,
+      input.loom_url,
+      input.website_url,
+      input.location,
+      updatedAt,
+    ],
+  );
+
+  const saved = await getProfile(accountId);
+  if (!saved) throw new Error("[store] Profile upsert failed");
+  return saved;
 }
 
 /* ----------------------------- settings ----------------------------- */
