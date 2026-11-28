@@ -50,11 +50,19 @@ export default async function MyApplicationsPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-5">
-      <section className="border-b border-line py-14">
-        <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-ember">
+      <section className="relative border-b border-line py-14">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-24 left-0 h-52 w-[36rem] max-w-full"
+          style={{
+            background:
+              "radial-gradient(closest-side, rgba(242,236,221,0.09), rgba(242,236,221,0))",
+          }}
+        />
+        <p className="relative font-mono text-[11px] uppercase tracking-[0.35em] text-ember">
           Coeso · Offers Board
         </p>
-        <h1 className="mt-5 font-display text-4xl leading-[0.95] sm:text-5xl">
+        <h1 className="relative mt-5 font-display text-4xl leading-[0.95] sm:text-5xl">
           My applications
         </h1>
         <p className="mt-4 max-w-xl text-sm leading-relaxed text-mute">
@@ -100,9 +108,9 @@ export default async function MyApplicationsPage() {
                     </p>
                   </div>
                   <span
-                    className={`pill ${
-                      copy.active ? "border-ember/60 text-ember" : ""
-                    }`}
+                    className={
+                      copy.active ? "pill border-ember/60 text-ember" : "pill pill-sage"
+                    }
                   >
                     {copy.label}
                   </span>
@@ -112,11 +120,20 @@ export default async function MyApplicationsPage() {
                   {STEPS.map((step, index) => (
                     <li key={step} className="flex items-center gap-2">
                       {index > 0 ? (
-                        <span className="text-line">—</span>
+                        <span
+                          aria-hidden="true"
+                          className={`inline-block h-px w-4 ${
+                            index <= reached ? "bg-ember/60" : "bg-line"
+                          }`}
+                        />
                       ) : null}
                       <span
                         className={
-                          index <= reached ? "text-paper" : "text-mute/50"
+                          index === reached
+                            ? "text-ember"
+                            : index < reached
+                              ? "text-paper"
+                              : "text-mute/50"
                         }
                       >
                         {COPY[step].label}

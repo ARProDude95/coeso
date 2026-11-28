@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LogoutButton } from "@/components/logout-button";
 import { NavProgress } from "@/components/nav-progress";
+import { SiteNav } from "@/components/site-nav";
 import { ToastProvider } from "@/components/toast";
 import { getSession } from "@/lib/auth";
 import "./globals.css";
@@ -22,7 +22,7 @@ export default async function RootLayout({
       <body className="min-h-screen">
         {/* A route change waits on D1; this is the only cue until it lands. */}
         <NavProgress />
-        <header className="sticky top-0 z-20 border-b border-line bg-ink/85 backdrop-blur">
+        <header className="header-sheen sticky top-0 z-20 border-b border-line bg-ink/80 backdrop-blur-md">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
             <Link href="/offers" className="group flex items-center gap-3">
               {/* Wordmark: the supplied logo, trimmed and keyed to sit on any
@@ -39,52 +39,23 @@ export default async function RootLayout({
                 Offers Board
               </span>
             </Link>
-            <nav className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-[0.22em] text-mute sm:gap-6">
-              <a href="https://coeso.biz" className="hover:text-paper">
-                Coeso
-              </a>
-              {session ? (
-                <>
-                  <Link href="/offers" className="hover:text-paper">
-                    Board
-                  </Link>
-                  <Link href="/applications" className="hover:text-paper">
-                    My applications
-                  </Link>
-                  {/* "Control room" not "Admin": the signed-in username sits
-                      right beside this link and the nav is uppercased, so an
-                      admin account called admin read "ADMIN ADMIN". */}
-                  {session.role === "admin" ? (
-                    <Link href="/admin" className="hover:text-paper">
-                      Control room
-                    </Link>
-                  ) : null}
-                  {/* The username is the way into the member's own profile, so
-                      it stays visible on small screens too. */}
-                  <Link
-                    href="/profile"
-                    className="text-paper/70 hover:text-ember"
-                    title="Your profile"
-                  >
-                    {session.username}
-                  </Link>
-                  <LogoutButton />
-                </>
-              ) : (
-                <Link
-                  href="/login"
-                  className="rounded-full border border-ember/60 px-3 py-1.5 text-ember transition hover:bg-ember hover:text-ink"
-                >
-                  Sign in
-                </Link>
-              )}
-            </nav>
+            <SiteNav
+              session={
+                session
+                  ? { username: session.username, role: session.role }
+                  : null
+              }
+            />
           </div>
         </header>
 
         <ToastProvider>{children}</ToastProvider>
 
-        <footer className="mt-24 border-t border-line">
+        <footer className="relative mt-24 border-t border-line">
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-line-bright/70 to-transparent"
+          />
           <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-8 text-xs text-mute sm:flex-row sm:items-center sm:justify-between">
             <span>
               Coeso Offers Board — a product of{" "}

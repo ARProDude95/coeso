@@ -109,16 +109,26 @@ export default async function AdminPage() {
 
       <dl className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
-          ["Open offers", stats.open],
-          ["Total offers", stats.total],
-          ["Members", accounts.length],
-          ["Applications", stats.applications],
-        ].map(([label, value]) => (
-          <div key={label} className="card px-5 py-4">
+          ["Open offers", stats.open, "warm"],
+          ["Total offers", stats.total, "deep"],
+          ["Members", accounts.length, "deep"],
+          ["Applications", stats.applications, "sage"],
+        ].map(([label, value, tone]) => (
+          <div
+            key={String(label)}
+            data-tone={tone === "warm" ? undefined : String(tone)}
+            className="stat-tile px-5 py-4"
+          >
             <dt className="font-mono text-[10px] uppercase tracking-[0.22em] text-mute">
               {label}
             </dt>
-            <dd className="mt-2 font-display text-3xl">{value}</dd>
+            <dd
+              className={`mt-2 font-display text-3xl ${
+                tone === "warm" ? "text-ember" : "text-paper"
+              }`}
+            >
+              {value}
+            </dd>
           </div>
         ))}
       </dl>

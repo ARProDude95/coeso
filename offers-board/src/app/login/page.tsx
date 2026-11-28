@@ -34,20 +34,33 @@ export default async function LoginPage() {
   return (
     <main className="mx-auto max-w-6xl px-5 py-14 sm:py-20">
       <div className="grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
-        <section>
-          <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-ember">
+        <section className="relative">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-28 -left-16 h-72 w-[34rem] max-w-none"
+            style={{
+              background:
+                "radial-gradient(closest-side, rgba(242,236,221,0.13), rgba(242,236,221,0))",
+              filter: "blur(6px)",
+            }}
+          />
+          <p className="relative font-mono text-[11px] uppercase tracking-[0.35em] text-ember">
             Coeso · Offers Board
           </p>
-          <h1 className="mt-6 max-w-lg font-display text-5xl leading-[0.95] sm:text-6xl">
-            Members <span className="italic text-ember">only.</span>
+          <h1 className="relative mt-6 max-w-lg font-display text-5xl leading-[0.95] sm:text-6xl">
+            Members <span className="text-warm italic">only.</span>
           </h1>
+          <div
+            aria-hidden="true"
+            className="relative mt-7 h-px w-28 bg-gradient-to-r from-ember/70 via-sand/40 to-transparent"
+          />
           <p className="mt-6 max-w-md text-base leading-relaxed text-mute">
             The offers board is private. Every account is created by Coeso’s
             Owner and handed out personally — nobody can sign up from this page.
           </p>
 
           <div className="mt-10 space-y-4">
-            <div className="card p-5">
+            <div className="card p-5 transition-colors hover:border-line-bright">
               <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-mute">
                 No account yet?
               </p>
@@ -73,7 +86,15 @@ export default async function LoginPage() {
           </div>
         </section>
 
-        <section className="lg:pt-16">
+        <section className="relative lg:pt-16">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-x-6 -top-4 bottom-0 -z-10 rounded-[28px]"
+            style={{
+              background:
+                "radial-gradient(60% 60% at 70% 10%, rgba(242,236,221,0.12), rgba(242,236,221,0))",
+            }}
+          />
           <div className="card p-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-ember">
               Sign in

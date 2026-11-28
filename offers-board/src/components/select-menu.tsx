@@ -271,7 +271,7 @@ export function SelectMenu<T extends string>({
         }
         className={`${
           pinned ? "z-50" : "absolute right-0 z-30 mt-2"
-        } overflow-hidden rounded-xl border border-line bg-[#202b31] p-1 shadow-[0_20px_45px_-15px_rgba(0,0,0,0.95)] outline-none ${
+        } overflow-hidden rounded-xl border border-line-bright/80 bg-ink-deep p-1 shadow-[0_24px_50px_-18px_rgba(0,0,0,0.95)] outline-none ${
           pinned ? "" : bare ? "w-44" : "w-60"
         }`}
       >
@@ -286,7 +286,9 @@ export function SelectMenu<T extends string>({
               onMouseEnter={() => setActive(index)}
               onClick={() => choose(index)}
               className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                highlighted ? "bg-[#36444b] text-paper" : "text-mute"
+                highlighted
+                  ? "bg-coal-soft text-paper"
+                  : "text-mute"
               } ${selected ? "text-paper" : ""}`}
             >
               <span>{option.label}</span>

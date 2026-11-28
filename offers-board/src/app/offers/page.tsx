@@ -56,8 +56,17 @@ export default async function BoardPage() {
             className="absolute -top-64 left-1/2 h-[30rem] w-[52rem] -translate-x-1/2 rounded-full"
             style={{
               background:
-                "radial-gradient(closest-side, rgba(242,236,221,0.16), rgba(242,236,221,0))",
+                "radial-gradient(closest-side, rgba(242,236,221,0.18), rgba(242,236,221,0))",
               filter: "blur(12px)",
+            }}
+          />
+          {/* A second, cool light behind the featured card: sage, not a new hue. */}
+          <div
+            className="absolute -top-40 right-[-12%] h-[26rem] w-[26rem] rounded-full opacity-70"
+            style={{
+              background:
+                "radial-gradient(closest-side, rgba(164,189,173,0.16), rgba(164,189,173,0))",
+              filter: "blur(18px)",
             }}
           />
           <div
@@ -86,8 +95,13 @@ export default async function BoardPage() {
             </p>
 
             <h1 className="mt-6 max-w-2xl font-display text-5xl leading-[0.95] sm:text-7xl">
-              Offers worth <span className="italic text-ember">closing.</span>
+              Offers worth <span className="text-warm italic">closing.</span>
             </h1>
+
+            <div
+              aria-hidden="true"
+              className="mt-7 h-px w-28 bg-gradient-to-r from-ember/70 via-sand/40 to-transparent"
+            />
 
             <p className="mt-6 max-w-xl text-base leading-relaxed text-mute">
               Open setter and closer roles from businesses inside Coeso. Read
@@ -96,6 +110,10 @@ export default async function BoardPage() {
 
             <div className="mt-7 flex flex-wrap items-center gap-2">
               <span className="pill border-ember/45 text-ember">
+                <span
+                  aria-hidden="true"
+                  className="h-1 w-1 rounded-full bg-sage"
+                />
                 Invite only
               </span>
               <span className="pill">Vetted businesses</span>
@@ -108,16 +126,11 @@ export default async function BoardPage() {
               {tiles.map((tile) => (
                 <div
                   key={tile.label}
-                  className="relative flex items-baseline justify-between gap-3 overflow-hidden rounded-xl border border-line bg-coal p-4 sm:block sm:p-5"
+                  data-tone={
+                    tile.hot ? undefined : tile.label === "New this week" ? "sage" : "deep"
+                  }
+                  className="stat-tile flex items-baseline justify-between gap-3 p-4 sm:block sm:p-5"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 top-0 h-px"
-                    style={{
-                      background:
-                        "linear-gradient(90deg, rgba(242,236,221,0.75), rgba(242,236,221,0))",
-                    }}
-                  />
                   <dt className="eyebrow">{tile.label}</dt>
                   <dd className="font-display text-2xl leading-none tabular-nums sm:mt-3 sm:text-4xl">
                     <span className={tile.hot ? "text-ember" : "text-paper"}>
@@ -149,9 +162,16 @@ export default async function BoardPage() {
           className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-3"
         >
           {STEPS.map((step, index) => (
-            <div key={step.title} className="bg-coal p-5">
-              <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-ember">
+            <div
+              key={step.title}
+              className="group bg-coal p-5 transition-colors hover:bg-coal-soft"
+            >
+              <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em] text-ember">
                 {`0${index + 1}`}
+                <span
+                  aria-hidden="true"
+                  className="h-px w-6 bg-gradient-to-r from-ember/70 to-transparent transition-all duration-200 group-hover:w-10"
+                />
               </p>
               <p className="mt-3 font-display text-lg leading-snug text-paper">
                 {step.title}

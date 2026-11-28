@@ -39,7 +39,9 @@ export function OfferCard({
           <p className="truncate text-[11px] uppercase tracking-[0.22em] text-paper/90">
             {offer.company}
           </p>
-          <p className="eyebrow mt-1.5">{ROLE_LABELS[offer.role_type]} role</p>
+          <p className="eyebrow mt-1.5">
+            {ROLE_LABELS[offer.role_type]} role
+          </p>
         </div>
         <div className="flex flex-col items-end gap-2">
           {offer.featured ? (
@@ -48,7 +50,7 @@ export function OfferCard({
             </span>
           ) : null}
           {applied ? (
-            <span className="pill border-ember/50 py-0.5 text-ember">
+            <span className="pill pill-sage py-0.5">
               ✓ Applied
             </span>
           ) : null}
@@ -71,7 +73,7 @@ export function OfferCard({
 
       <div className="mt-6 border-t border-line pt-5">
         <p className="eyebrow">Commission</p>
-        <p className="mt-2 font-display text-2xl leading-[1.1] tracking-tight text-ember sm:text-[1.9rem]">
+        <p className="text-warm mt-2 font-display text-2xl leading-[1.1] tracking-tight sm:text-[1.9rem]">
           {offer.commission}
         </p>
       </div>

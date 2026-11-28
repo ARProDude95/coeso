@@ -49,16 +49,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={toast.id}
             role="status"
-            className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border bg-coal px-4 py-3 text-sm shadow-lg ${
+            className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border bg-coal-soft px-4 py-3 text-sm shadow-[0_18px_40px_-24px_rgba(0,0,0,0.95)] ${
               toast.tone === "error"
                 ? "border-ember/60 text-ember"
-                : "border-line text-paper"
+                : "border-sage/40 text-paper"
             }`}
           >
             <span
               aria-hidden="true"
               className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                toast.tone === "error" ? "bg-ember" : "bg-paper/60"
+                toast.tone === "error" ? "bg-ember" : "bg-sage"
               }`}
             />
             <p className="flex-1 leading-relaxed">{toast.message}</p>
