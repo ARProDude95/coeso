@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface SelectOption<T extends string> {
   value: T;
@@ -17,8 +18,24 @@ interface SelectMenuProps<T extends string> {
   className?: string;
   /** Compact trigger for dense places like a table cell. */
   bare?: boolean;
+  /**
+   * Draw the menu in a fixed-position portal on <body> instead of under the
+   * trigger. Needed inside a scrolling container (a table with overflow-x-auto
+   * clips an absolutely positioned panel), and the panel moves itself above the
+   * trigger when there is no room below.
+   */
+  portal?: boolean;
   disabled?: boolean;
 }
+
+interface Placement {
+  top: number;
+  left: number;
+  width: number;
+}
+
+const MENU_MARGIN = 8;
+const MENU_WIDTH = { bare: 176, full: 240 };
 
 /**
  * A listbox instead of <select>: the native popup is drawn by the operating
@@ -34,10 +51,12 @@ export function SelectMenu<T extends string>({
   onChange,
   className = "",
   bare = false,
+  portal = false,
   disabled = false,
 }: SelectMenuProps<T>) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [placement, setPlacement] = useState<Placement | null>(null);
 
   const id = useId();
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -61,12 +80,71 @@ export function SelectMenu<T extends string>({
     if (!open) return;
 
     function onPointerDown(event: PointerEvent) {
-      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      // The portal panel sits outside the wrapper, so it counts as inside.
+      if (wrapRef.current?.contains(target) || listRef.current?.contains(target))
+        return;
+      setOpen(false);
     }
 
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
+
+  /** Anchor the portal panel to the trigger, above it when the room runs out. */
+  const measure = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const width = bare ? MENU_WIDTH.bare : MENU_WIDTH.full;
+    const height = listRef.current?.offsetHeight ?? options.length * 36 + 8;
+    const maxLeft = window.innerWidth - width - MENU_MARGIN;
+    const left = Math.min(
+      Math.max(MENU_MARGIN, rect.right - width),
+      Math.max(MENU_MARGIN, maxLeft),
+    );
+    const below = rect.bottom + MENU_MARGIN;
+    const above = rect.top - MENU_MARGIN - height;
+    const top =
+      below + height > window.innerHeight - MENU_MARGIN && above >= MENU_MARGIN
+        ? above
+        : below;
+
+    setPlacement({ top, left, width });
+  }, [bare, options.length]);
+
+  // Measure before paint, so the panel never flashes in the wrong corner.
+  useLayoutEffect(() => {
+    if (!open || !portal) {
+      setPlacement(null);
+      return;
+    }
+    measure();
+  }, [open, portal, measure]);
+
+  // A panel pinned to the viewport has to go when the page or the table scrolls
+  // under it; its own scrolling is allowed.
+  useEffect(() => {
+    if (!open || !portal) return;
+
+    function onScroll(event: Event) {
+      const target = event.target;
+      if (target instanceof Node && listRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+
+    function onResize() {
+      measure();
+    }
+
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open, portal, measure]);
 
   // Opening always starts on the current choice, as a native select does.
   function openMenu() {
@@ -163,43 +241,65 @@ export function SelectMenu<T extends string>({
         </svg>
       </button>
 
-      {open ? (
-        <div
-          ref={listRef}
-          id={`${id}-list`}
-          role="listbox"
-          aria-labelledby={`${id}-trigger`}
-          tabIndex={-1}
-          onKeyDown={onListKeyDown}
-          className={`absolute right-0 z-30 mt-2 overflow-hidden rounded-xl border border-line bg-[#0b0d10] p-1 shadow-[0_20px_45px_-15px_rgba(0,0,0,0.95)] outline-none ${
-            bare ? "w-44" : "w-60"
-          }`}
-        >
-          {options.map((option, index) => {
-            const selected = index === selectedIndex;
-            const highlighted = index === active;
-            return (
-              <div
-                key={option.value}
-                role="option"
-                aria-selected={selected}
-                onMouseEnter={() => setActive(index)}
-                onClick={() => choose(index)}
-                className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                  highlighted ? "bg-[#191d23] text-paper" : "text-mute"
-                } ${selected ? "text-paper" : ""}`}
-              >
-                <span>{option.label}</span>
-                {selected ? (
-                  <span aria-hidden="true" className="text-ember">
-                    ✓
-                  </span>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
+      {open
+        ? (portal ? createPortal(renderList(), document.body) : renderList())
+        : null}
     </div>
   );
+
+  function renderList() {
+    const anchored = portal && placement !== null;
+
+    return (
+      <div
+        ref={listRef}
+        id={`${id}-list`}
+        role="listbox"
+        aria-labelledby={`${id}-trigger`}
+        tabIndex={-1}
+        onKeyDown={onListKeyDown}
+        style={
+          portal
+            ? {
+                position: "fixed",
+                top: placement?.top ?? 0,
+                left: placement?.left ?? 0,
+                width:
+                  placement?.width ?? (bare ? MENU_WIDTH.bare : MENU_WIDTH.full),
+                visibility: anchored ? "visible" : "hidden",
+              }
+            : undefined
+        }
+        className={`${
+          portal ? "z-50" : "absolute right-0 z-30 mt-2"
+        } overflow-hidden rounded-xl border border-line bg-[#0b0d10] p-1 shadow-[0_20px_45px_-15px_rgba(0,0,0,0.95)] outline-none ${
+          portal ? "" : bare ? "w-44" : "w-60"
+        }`}
+      >
+        {options.map((option, index) => {
+          const selected = index === selectedIndex;
+          const highlighted = index === active;
+          return (
+            <div
+              key={option.value}
+              role="option"
+              aria-selected={selected}
+              onMouseEnter={() => setActive(index)}
+              onClick={() => choose(index)}
+              className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                highlighted ? "bg-[#191d23] text-paper" : "text-mute"
+              } ${selected ? "text-paper" : ""}`}
+            >
+              <span>{option.label}</span>
+              {selected ? (
+                <span aria-hidden="true" className="text-ember">
+                  ✓
+                </span>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 }
