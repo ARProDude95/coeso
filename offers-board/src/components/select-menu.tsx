@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 export interface SelectOption<T extends string> {
   value: T;
@@ -19,12 +18,13 @@ interface SelectMenuProps<T extends string> {
   /** Compact trigger for dense places like a table cell. */
   bare?: boolean;
   /**
-   * Draw the menu in a fixed-position portal on <body> instead of under the
-   * trigger. Needed inside a scrolling container (a table with overflow-x-auto
-   * clips an absolutely positioned panel), and the panel moves itself above the
-   * trigger when there is no room below.
+   * Pin the panel to the viewport instead of positioning it under the trigger.
+   * A fixed element is laid out against the viewport, so an overflow container
+   * (the admin table's overflow-x-auto wrapper) cannot clip it, and the panel
+   * still sits in the table's own markup. It moves itself above the trigger
+   * when there is no room below.
    */
-  portal?: boolean;
+  pinned?: boolean;
   disabled?: boolean;
 }
 
@@ -51,7 +51,7 @@ export function SelectMenu<T extends string>({
   onChange,
   className = "",
   bare = false,
-  portal = false,
+  pinned = false,
   disabled = false,
 }: SelectMenuProps<T>) {
   const [open, setOpen] = useState(false);
@@ -81,7 +81,8 @@ export function SelectMenu<T extends string>({
 
     function onPointerDown(event: PointerEvent) {
       const target = event.target as Node;
-      // The portal panel sits outside the wrapper, so it counts as inside.
+      // The panel is inside the wrapper, but never treat a click in it as a
+      // click outside; a fixed panel can also end up visually detached.
       if (wrapRef.current?.contains(target) || listRef.current?.contains(target))
         return;
       setOpen(false);
@@ -91,7 +92,7 @@ export function SelectMenu<T extends string>({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  /** Anchor the portal panel to the trigger, above it when the room runs out. */
+  /** Anchor the pinned panel to the trigger, above it when the room runs out. */
   const measure = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
@@ -116,17 +117,17 @@ export function SelectMenu<T extends string>({
 
   // Measure before paint, so the panel never flashes in the wrong corner.
   useLayoutEffect(() => {
-    if (!open || !portal) {
+    if (!open || !pinned) {
       setPlacement(null);
       return;
     }
     measure();
-  }, [open, portal, measure]);
+  }, [open, pinned, measure]);
 
   // A panel pinned to the viewport has to go when the page or the table scrolls
   // under it; its own scrolling is allowed.
   useEffect(() => {
-    if (!open || !portal) return;
+    if (!open || !pinned) return;
 
     function onScroll(event: Event) {
       const target = event.target;
@@ -144,7 +145,7 @@ export function SelectMenu<T extends string>({
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
-  }, [open, portal, measure]);
+  }, [open, pinned, measure]);
 
   // Opening always starts on the current choice, as a native select does.
   function openMenu() {
@@ -241,14 +242,12 @@ export function SelectMenu<T extends string>({
         </svg>
       </button>
 
-      {open
-        ? (portal ? createPortal(renderList(), document.body) : renderList())
-        : null}
+      {open ? renderList() : null}
     </div>
   );
 
   function renderList() {
-    const anchored = portal && placement !== null;
+    const anchored = pinned && placement !== null;
 
     return (
       <div
@@ -259,7 +258,7 @@ export function SelectMenu<T extends string>({
         tabIndex={-1}
         onKeyDown={onListKeyDown}
         style={
-          portal
+          pinned
             ? {
                 position: "fixed",
                 top: placement?.top ?? 0,
@@ -271,9 +270,9 @@ export function SelectMenu<T extends string>({
             : undefined
         }
         className={`${
-          portal ? "z-50" : "absolute right-0 z-30 mt-2"
+          pinned ? "z-50" : "absolute right-0 z-30 mt-2"
         } overflow-hidden rounded-xl border border-line bg-[#0b0d10] p-1 shadow-[0_20px_45px_-15px_rgba(0,0,0,0.95)] outline-none ${
-          portal ? "" : bare ? "w-44" : "w-60"
+          pinned ? "" : bare ? "w-44" : "w-60"
         }`}
       >
         {options.map((option, index) => {

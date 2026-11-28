@@ -78,7 +78,7 @@ export function ApplicationStatus({
         onChange={update}
         disabled={busy}
         bare
-        portal
+        pinned
       />
       {current === "hired" ? (
         <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-ember">
