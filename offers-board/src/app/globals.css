@@ -257,6 +257,30 @@ body {
   }
 }
 
+/* --- route progress -------------------------------------------------- */
+
+/* Drawn by NavProgress only when a route change is slow enough to notice. */
+.nav-progress {
+  width: 38%;
+  animation: nav-progress 1.1s ease-in-out infinite;
+}
+
+@keyframes nav-progress {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(310%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress {
+    width: 100%;
+    animation: none;
+  }
+}
+
 /* Mobile filter bar: hide the scrollbar on the pill row without killing scroll. */
 .no-scrollbar {
   scrollbar-width: none;

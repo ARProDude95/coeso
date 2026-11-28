@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
+import { NavProgress } from "@/components/nav-progress";
 import { ToastProvider } from "@/components/toast";
 import { getSession } from "@/lib/auth";
 import "./globals.css";
@@ -19,6 +20,8 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen">
+        {/* A route change waits on D1; this is the only cue until it lands. */}
+        <NavProgress />
         <header className="sticky top-0 z-20 border-b border-line bg-ink/85 backdrop-blur">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
             <Link href="/offers" className="group flex items-center gap-3">

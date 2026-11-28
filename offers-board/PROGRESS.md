@@ -339,3 +339,10 @@
 - **No orange left anywhere:** the hero's glow, hairline grid, stat-tile tops and featured-card wash (three inline `rgba(255,90,31,…)` gradients), the checkbox accent in the offer form, the listbox surface in `SelectMenu`, the button/pill hover borders, the inset field background and the Discord embed stripe (`0xf2ecdd`) all moved to the logo palette.
 - **Contrast, measured:** paper on ink 9.08:1, accent on ink 11.04:1, ink on accent 11.04:1, mute on ink 5.66:1, mute on card 5.09:1 — AA everywhere, AAA for body and accent.
 - **Checked:** `bun run typecheck` and `bun run build` clean, and a harness rendered against the compiled stylesheet shows the hero, pills, both buttons, cards, monogram, field and listbox in the new palette.
+
+### Offers Board — a hairline progress bar while a route loads ✅
+
+- **Why:** the segment `loading.tsx` files are gone (this runtime never reveals their boundary), so clicking a board link left the old page sitting inert for the 2–5 s D1 takes to answer, with no way to tell the click had registered.
+- **`NavProgress`** (client, mounted in the root layout, above the header): one capture-phase click listener on the document tracks same-origin, same-tab links that would change the pathname — hash links, downloads, `target="_blank"`, modifier-clicks and external URLs are ignored. The bar appears only after 150 ms so a prefetched route never flashes it, is cleared the moment `usePathname()` changes, and has a 12 s safety stop in case a navigation never lands. Under `prefers-reduced-motion` it is a static full-width bar instead of the sweeping one.
+- **Nothing else needed a spinner:** every mutating action already reports its own state — “Sending…”, “Saving…”, “Creating…”, “Pushing…”, the test ping, the row busy flags and the disabled status menu.
+- **Verified on production in the browser:** a hydration marker survived the click, so the route change is client-side as intended; `.nav-progress` was present 150 ms after clicking Board from `/applications` (the route took seconds), and it was gone with the “Offers worth closing.” heading once the navigation landed.
