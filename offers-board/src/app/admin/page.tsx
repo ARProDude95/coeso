@@ -10,12 +10,14 @@ import { OffersTable } from "@/components/offers-table";
 import { getSession } from "@/lib/auth";
 import { ensureDailyBackup, lastBackupAt } from "@/lib/backup";
 import { notificationsConfigured } from "@/lib/notify";
+import { formatClosingDate, isTakingApplications } from "@/lib/offer-format";
 import {
   applicationCountsByOffer,
   boardStats,
   listAccounts,
   listApplications,
   listOffers,
+  type Offer,
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +38,20 @@ function formatDateTime(iso: string): string {
   });
 }
 
+/** An open offer with no closing date is called stale after this long. */
+const STALE_DAYS = 14;
+
+/** Why this offer is in the needs-attention list, in the owner's words. */
+function staleReason(offer: Offer): string {
+  if (offer.closes_at && !isTakingApplications(offer)) {
+    return `closing date passed ${formatClosingDate(offer.closes_at)}`;
+  }
+  const days = Math.floor(
+    (Date.now() - Date.parse(offer.created_at)) / 86_400_000,
+  );
+  return `open ${Number.isFinite(days) ? days : 0} days, no closing date`;
+}
+
 export default async function AdminPage() {
   const session = await getSession();
   if (session?.role !== "admin") redirect("/login");
@@ -47,6 +63,17 @@ export default async function AdminPage() {
     listAccounts(),
     applicationCountsByOffer(),
   ]);
+
+  // Still open, but nothing is happening: its closing date passed, or it has
+  // been up for a fortnight with no date at all.
+  const staleOffers = offers.filter((offer) => {
+    if (offer.status !== "open") return false;
+    if (offer.closes_at) return !isTakingApplications(offer);
+    const posted = Date.parse(offer.created_at);
+    return (
+      Number.isFinite(posted) && Date.now() - posted > STALE_DAYS * 86_400_000
+    );
+  });
 
   // At most one snapshot a day: the backup happens while the owner is here.
   const backup = await ensureDailyBackup();
@@ -88,6 +115,47 @@ export default async function AdminPage() {
           </div>
         ))}
       </dl>
+
+      {staleOffers.length > 0 ? (
+        <section className="mt-12">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-mono text-[10px] uppercase tracking-[0.25em] text-ember">
+              Needs attention ({staleOffers.length})
+            </h2>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-mute">
+              Stale open offers
+            </p>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-mute">
+            These still carry an open status. One is past its closing date and
+            no longer takes applications; the rest have been open {STALE_DAYS}+
+            {" "}
+            days with no closing date. Close them, move the date, or set one so
+            they close themselves.
+          </p>
+          <ul className="mt-4 grid gap-2">
+            {staleOffers.map((offer) => (
+              <li
+                key={offer.id}
+                className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-paper">{offer.title}</p>
+                  <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-mute">
+                    {offer.company} · {staleReason(offer)}
+                  </p>
+                </div>
+                <Link
+                  href={`/admin/offers/${offer.id}`}
+                  className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-mute underline decoration-line underline-offset-4 hover:text-paper"
+                >
+                  Edit
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="mt-12">
         <h2 className="font-mono text-[10px] uppercase tracking-[0.25em] text-mute">

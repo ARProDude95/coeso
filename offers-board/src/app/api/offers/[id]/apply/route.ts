@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { notifyNewApplication } from "@/lib/notify";
+import { isTakingApplications } from "@/lib/offer-format";
 import {
   createApplication,
   getOffer,
@@ -26,7 +27,9 @@ export async function POST(
   if (!offer) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  if (offer.status !== "open") {
+  // A closing date that has passed stops applications without the owner having
+  // to come back and close the offer by hand.
+  if (!isTakingApplications(offer)) {
     return NextResponse.json({ error: "closed" }, { status: 409 });
   }
 

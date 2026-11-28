@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApplyForm } from "@/components/apply-form";
 import { getSession } from "@/lib/auth";
+import { formatClosingDate, isTakingApplications } from "@/lib/offer-format";
 import { getOffer, hasAppliedForOffer } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,8 @@ export default async function OfferPage({
 
   const session = await getSession();
   const applied = session ? await hasAppliedForOffer(offer.id, session.id) : false;
+  // Closed by hand or by its closing date — either way, no applications.
+  const open = isTakingApplications(offer);
 
   const paragraphs = offer.description.split(/\n{2,}/).filter(Boolean);
   const requirements = offer.requirements
@@ -35,6 +38,9 @@ export default async function OfferPage({
     ["Role", offer.role_type],
     ["Posted", posted],
   ];
+  if (offer.closes_at) {
+    facts.push(["Applications close", formatClosingDate(offer.closes_at)]);
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-5">
@@ -59,7 +65,7 @@ export default async function OfferPage({
           <div className="mt-6 flex flex-wrap gap-2">
             <span className="pill">{offer.role_type} role</span>
             <span className="pill">{offer.pay_type}</span>
-            {offer.status === "closed" ? (
+            {!open ? (
               <span className="pill border-ember/60 text-ember">Closed</span>
             ) : null}
             {offer.featured ? (
@@ -104,10 +110,10 @@ export default async function OfferPage({
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <div className="card p-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-ember">
-              {offer.status === "open" ? "Interested?" : "Closed"}
+              {open ? "Interested?" : "Closed"}
             </p>
 
-            {offer.status === "open" && applied ? (
+            {open && applied ? (
               <>
                 <h2 className="mt-3 font-display text-2xl">
                   Application received
@@ -129,7 +135,7 @@ export default async function OfferPage({
                   One application per member, per offer.
                 </p>
               </>
-            ) : offer.status === "open" ? (
+            ) : open ? (
               <>
                 <h2 className="mt-3 font-display text-2xl">
                   Apply for this role
@@ -149,7 +155,9 @@ export default async function OfferPage({
                   No longer taking interest
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-mute">
-                  This offer has been closed.{" "}
+                  {offer.status === "open" && offer.closes_at
+                    ? `Applications closed on ${formatClosingDate(offer.closes_at)}.`
+                    : "This offer has been closed."}{" "}
                   <Link href="/offers" className="text-ember underline">
                     Browse the board
                   </Link>{" "}

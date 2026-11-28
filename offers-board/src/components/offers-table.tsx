@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/toast";
+import { formatClosingDate, isTakingApplications } from "@/lib/offer-format";
 import type { Offer } from "@/lib/store";
 
 function formatDate(iso: string): string {
@@ -157,6 +158,19 @@ export function OffersTable({
                   >
                     {offer.status}
                   </span>
+                  {offer.closes_at ? (
+                    <span
+                      className={`mt-1 block font-mono text-[9px] uppercase tracking-[0.16em] ${
+                        offer.status === "open" && !isTakingApplications(offer)
+                          ? "text-ember"
+                          : "text-mute"
+                      }`}
+                    >
+                      {offer.status === "open" && !isTakingApplications(offer)
+                        ? "date passed"
+                        : `closes ${formatClosingDate(offer.closes_at)}`}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3">
                   {(counts[offer.id] ?? 0) === 0 ? (

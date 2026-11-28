@@ -1,4 +1,5 @@
 import { getDb, type Db, type SqlValue } from "./db";
+import { todayIso } from "./offer-format";
 import { hashPassword } from "./password";
 import type { ApplicationInput, OfferInput } from "./validation";
 
@@ -15,6 +16,8 @@ export interface Offer {
   requirements: string;
   status: "open" | "closed";
   featured: number;
+  /** Last calendar day (YYYY-MM-DD) that takes applications; null = no date. */
+  closes_at: string | null;
   created_at: string;
 }
 
@@ -71,6 +74,7 @@ const TABLES = [
      requirements TEXT NOT NULL DEFAULT '',
      status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
      featured    INTEGER NOT NULL DEFAULT 0,
+     closes_at   TEXT,
      created_at  TEXT NOT NULL
    )`,
   `CREATE TABLE IF NOT EXISTS accounts (
@@ -306,6 +310,8 @@ async function bootstrap(): Promise<void> {
  */
 async function migrate(db: Db): Promise<void> {
   const additions = [
+    // Offers gained an optional closing date after the first databases shipped.
+    "ALTER TABLE offers ADD COLUMN closes_at TEXT",
     "ALTER TABLE applications ADD COLUMN account_id TEXT",
     "ALTER TABLE applications ADD COLUMN account_username TEXT NOT NULL DEFAULT ''",
   ];
@@ -363,7 +369,13 @@ export async function listOffers(
   const where: string[] = [];
   const params: SqlValue[] = [];
 
-  if (!options.includeClosed) where.push("status = 'open'");
+  // The board never shows an offer whose closing day has passed; the owner's
+  // view keeps it visible so it can be closed properly.
+  if (!options.includeClosed) {
+    where.push("status = 'open'");
+    where.push("(closes_at IS NULL OR closes_at >= ?)");
+    params.push(todayIso());
+  }
 
   if (options.role && options.role !== "all") {
     where.push("role_type = ?");
@@ -402,8 +414,8 @@ export async function createOffer(input: OfferInput): Promise<Offer> {
   await db.query(
     `INSERT INTO offers (
        id, title, company, role_type, commission, pay_type, description,
-       requirements, status, featured, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+       requirements, status, featured, closes_at, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
     [
       id,
       input.title,
@@ -414,6 +426,7 @@ export async function createOffer(input: OfferInput): Promise<Offer> {
       input.description,
       input.requirements,
       input.featured ? 1 : 0,
+      input.closes_at,
       new Date().toISOString(),
     ],
   );
@@ -432,7 +445,8 @@ export async function updateOffer(
   const result = await db.query(
     `UPDATE offers
         SET title = ?, company = ?, role_type = ?, commission = ?,
-            pay_type = ?, description = ?, requirements = ?, featured = ?
+            pay_type = ?, description = ?, requirements = ?, featured = ?,
+            closes_at = ?
       WHERE id = ?`,
     [
       input.title,
@@ -443,6 +457,7 @@ export async function updateOffer(
       input.description,
       input.requirements,
       input.featured ? 1 : 0,
+      input.closes_at,
       id,
     ],
   );
@@ -820,7 +835,10 @@ export async function boardStats(): Promise<BoardStats> {
   const db = await getDb();
 
   const [open, total, fresh, applications] = await Promise.all([
-    db.query("SELECT COUNT(*) AS count FROM offers WHERE status = 'open'"),
+    db.query(
+      "SELECT COUNT(*) AS count FROM offers WHERE status = 'open' AND (closes_at IS NULL OR closes_at >= ?)",
+      [todayIso()],
+    ),
     db.query("SELECT COUNT(*) AS count FROM offers"),
     db.query("SELECT COUNT(*) AS count FROM offers WHERE created_at >= ?", [
       isoDaysFromNow(-7),

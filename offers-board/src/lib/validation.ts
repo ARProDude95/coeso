@@ -13,6 +13,15 @@ export const offerInput = z.object({
   description: text(4000),
   requirements: z.string().trim().max(4000).default(""),
   featured: z.boolean().default(false),
+  /** Optional last day that takes applications; an empty field means none. */
+  closes_at: z
+    .union([
+      z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD date"),
+      z.literal(""),
+      z.null(),
+    ])
+    .transform((value) => (value ? value : null))
+    .default(null),
 });
 
 export const applicationInput = z.object({

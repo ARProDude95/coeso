@@ -2,7 +2,12 @@ import Link from "next/link";
 import { BoardBrowser } from "@/components/board-browser";
 import { getSession } from "@/lib/auth";
 import { boardStats, listAppliedOfferIds, listOffers } from "@/lib/store";
-import { ROLE_LABELS, isNewThisWeek, monogram } from "@/lib/offer-format";
+import {
+  ROLE_LABELS,
+  isNewThisWeek,
+  isTakingApplications,
+  monogram,
+} from "@/lib/offer-format";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +36,8 @@ export default async function BoardPage() {
   ]);
 
   const featured =
-    offers.find((offer) => offer.featured && offer.status === "open") ??
-    offers.find((offer) => offer.status === "open") ??
+    offers.find((offer) => offer.featured && isTakingApplications(offer)) ??
+    offers.find((offer) => isTakingApplications(offer)) ??
     null;
 
   const tiles = [

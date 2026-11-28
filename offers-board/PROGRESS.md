@@ -293,3 +293,11 @@
 - **Mobile fixes found while checking:** the “Applications” label overflowed a 3-up tile at 390px, so the tiles collapse to label-left / number-right rows; and the featured card truncated “18% of contract value…” next to the CTA, so the commission now sits on its own line with the CTA beneath it.
 - **Colour stays inside the brand:** ember on ink/coal/line with paper type, no new hues. The live dot gets a slow `.pulse-dot` halo in `globals.css`, switched off under `prefers-reduced-motion`.
 - **Checks:** `bun run build` and typecheck clean. Harness against the built stylesheet — 1280px: three 185px tiles, labels above numbers, footnotes visible; 390px: single column, labels fit, commission renders in full, no horizontal overflow at either width. Not deployed.
+
+### Offers Board — optional closing date, stale offers flagged on /admin ✅
+
+- **Optional closing day:** the offer form gains a `type="date"` field, stored as a new `closes_at TEXT` column (`YYYY-MM-DD`, compared as a UTC calendar day) that `migrate()` adds to existing databases. Left blank it stays `NULL`, which means no deadline, exactly as before.
+- **One gate instead of a sweep:** `isTakingApplications(offer)` is `status === "open" && (!closes_at || closes_at >= todayIso())`. The board list, board stats, the apply route and the detail page all call it, so a passed closing day stops collecting applications immediately — no background job, and `status` is not flipped behind the reader's back. `open`/`closed` stays the recorded truth and the existing Close button still works.
+- **What a reader sees:** the detail page lists “Applications close <date>” among its facts, then switches to the Closed pill and “Applications closed on <date>.” once the day has gone; a submit against a passed date returns 409 `closed`; the admin table tags each row `closes <date>` or an ember `date passed`.
+- **/admin “Needs attention”:** a live list of open offers past their closing day, plus open offers listed more than 14 days with no closing date — each with the reason it needs a decision and an Edit link.
+- **Checks:** `bun run typecheck` and `bun run build` clean. Not deployed, so the column reaches production on the next deploy.

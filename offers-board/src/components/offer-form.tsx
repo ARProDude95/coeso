@@ -43,6 +43,7 @@ export function OfferForm({ offer }: { offer?: Offer }) {
           description: data.get("description"),
           requirements: data.get("requirements"),
           featured: data.get("featured") === "on",
+          closes_at: data.get("closes_at") || null,
         }),
       },
     );
@@ -135,6 +136,22 @@ export function OfferForm({ offer }: { offer?: Offer }) {
           defaultValue={offer?.pay_type}
           placeholder="Commission only"
         />
+      </div>
+      <div>
+        <label className="label" htmlFor="offer-closes">
+          Closes (optional)
+        </label>
+        <input
+          id="offer-closes"
+          name="closes_at"
+          type="date"
+          className="field"
+          defaultValue={offer?.closes_at ?? ""}
+        />
+        <p className="mt-1.5 text-[11px] leading-relaxed text-mute">
+          Last day that takes applications. Empty means it stays open until you
+          close it.
+        </p>
       </div>
       <div className="sm:col-span-2">
         <label className="label" htmlFor="offer-description">
