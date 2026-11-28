@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { BoardBrowser } from "@/components/board-browser";
 import { getSession } from "@/lib/auth";
-import { boardStats, listAppliedOfferIds, listOffers } from "@/lib/store";
+import { boardStats, listAppliedOfferIds, listOffers, type Offer } from "@/lib/store";
 import {
   ROLE_LABELS,
   isNewThisWeek,
@@ -27,18 +28,17 @@ const STEPS = [
   },
 ];
 
+/**
+ * The board reads D1 on every request, so the shell is split from the data:
+ * the hero and its counters render as soon as the small stats query returns,
+ * and the two things that need the full offer list stream in behind their own
+ * Suspense boundaries. No loading.tsx — that segment boundary never reveals
+ * itself on this runtime, while an in-page boundary is a plain React suspense.
+ */
 export default async function BoardPage() {
-  const session = await getSession();
-  const [offers, stats, appliedOfferIds] = await Promise.all([
-    listOffers({}),
-    boardStats(),
-    session ? listAppliedOfferIds(session.id) : Promise.resolve([]),
-  ]);
-
-  const featured =
-    offers.find((offer) => offer.featured && isTakingApplications(offer)) ??
-    offers.find((offer) => isTakingApplications(offer)) ??
-    null;
+  const stats = await boardStats();
+  // One query shared by both streamed sections, started but not awaited here.
+  const offers = listOffers({});
 
   const tiles = [
     { label: "Open offers", value: stats.open, note: "live now", hot: true },
@@ -138,69 +138,9 @@ export default async function BoardPage() {
               <span className="eyebrow">Live</span>
             </div>
 
-            {featured ? (
-              <Link
-                href={`/offers/${featured.id}`}
-                className="card card-link group mt-4 block overflow-hidden"
-              >
-                <div
-                  className="flex items-start gap-4 border-b border-line px-5 py-4"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(180deg, rgba(242,236,221,0.10), rgba(242,236,221,0))",
-                  }}
-                >
-                  <span className="monogram" aria-hidden="true">
-                    {monogram(featured.company)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] uppercase tracking-[0.22em] text-paper/90">
-                      {featured.company}
-                    </p>
-                    <p className="eyebrow mt-1.5">
-                      {ROLE_LABELS[featured.role_type]} · {featured.pay_type}
-                    </p>
-                  </div>
-                  {isNewThisWeek(featured.created_at) ? (
-                    <span className="pill shrink-0 border-ember/50 py-0.5 text-ember">
-                      New
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="p-5">
-                  <h2 className="font-display text-2xl leading-[1.15] transition-colors group-hover:text-ember">
-                    {featured.title}
-                  </h2>
-
-                  <div className="mt-5 flex flex-col items-start gap-3 border-t border-line pt-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-                    <div className="min-w-0">
-                      <p className="eyebrow">Commission</p>
-                      <p className="mt-2 font-display text-2xl leading-none tracking-tight text-ember">
-                        {featured.commission}
-                      </p>
-                    </div>
-                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.22em] text-paper/70 transition-colors group-hover:text-ember">
-                      View offer →
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ) : (
-              <div className="card mt-4 p-6">
-                <p className="font-display text-xl leading-snug">
-                  Every role is filled right now.
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-mute">
-                  New offers land here first, and they go to the whole board at
-                  once — no early access tier.
-                </p>
-              </div>
-            )}
-
-            <p className="mt-4 font-mono text-[10px] uppercase leading-relaxed tracking-[0.2em] text-mute/70">
-              Commission is set by the owner, not negotiated by us.
-            </p>
+            <Suspense fallback={<FeaturedSkeleton />}>
+              <FeaturedOffer offers={offers} />
+            </Suspense>
           </div>
         </div>
 
@@ -224,7 +164,144 @@ export default async function BoardPage() {
         </section>
       </section>
 
-      <BoardBrowser offers={offers} appliedOfferIds={appliedOfferIds} />
+      <Suspense fallback={<BoardSkeleton />}>
+        <BoardList offers={offers} />
+      </Suspense>
     </main>
+  );
+}
+
+/** The featured card, streamed once the offer list arrives. */
+async function FeaturedOffer({ offers }: { offers: Promise<Offer[]> }) {
+  const list = await offers;
+  const featured =
+    list.find((offer) => offer.featured && isTakingApplications(offer)) ??
+    list.find((offer) => isTakingApplications(offer)) ??
+    null;
+
+  if (!featured) {
+    return (
+      <div className="card mt-4 p-6">
+        <p className="font-display text-xl leading-snug">
+          Every role is filled right now.
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-mute">
+          New offers land here first, and they go to the whole board at once —
+          no early access tier.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Link
+        href={`/offers/${featured.id}`}
+        className="card card-link group mt-4 block overflow-hidden"
+      >
+        <div
+          className="flex items-start gap-4 border-b border-line px-5 py-4"
+          style={{
+            backgroundImage:
+              "linear-gradient(180deg, rgba(242,236,221,0.10), rgba(242,236,221,0))",
+          }}
+        >
+          <span className="monogram" aria-hidden="true">
+            {monogram(featured.company)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] uppercase tracking-[0.22em] text-paper/90">
+              {featured.company}
+            </p>
+            <p className="eyebrow mt-1.5">
+              {ROLE_LABELS[featured.role_type]} · {featured.pay_type}
+            </p>
+          </div>
+          {isNewThisWeek(featured.created_at) ? (
+            <span className="pill shrink-0 border-ember/50 py-0.5 text-ember">
+              New
+            </span>
+          ) : null}
+        </div>
+
+        <div className="p-5">
+          <h2 className="font-display text-2xl leading-[1.15] transition-colors group-hover:text-ember">
+            {featured.title}
+          </h2>
+
+          <div className="mt-5 flex flex-col items-start gap-3 border-t border-line pt-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+            <div className="min-w-0">
+              <p className="eyebrow">Commission</p>
+              <p className="mt-2 font-display text-2xl leading-none tracking-tight text-ember">
+                {featured.commission}
+              </p>
+            </div>
+            <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.22em] text-paper/70 transition-colors group-hover:text-ember">
+              View offer →
+            </span>
+          </div>
+        </div>
+      </Link>
+
+      <p className="mt-4 font-mono text-[10px] uppercase leading-relaxed tracking-[0.2em] text-mute/70">
+        Commission is set by the owner, not negotiated by us.
+      </p>
+    </>
+  );
+}
+
+/** The filters and the offer cards, streamed after the shell is on screen. */
+async function BoardList({ offers }: { offers: Promise<Offer[]> }) {
+  const session = await getSession();
+  const [list, appliedOfferIds] = await Promise.all([
+    offers,
+    session ? listAppliedOfferIds(session.id) : Promise.resolve([]),
+  ]);
+
+  return <BoardBrowser offers={list} appliedOfferIds={appliedOfferIds} />;
+}
+
+/** Same footprint as the featured card, so the hero does not jump. */
+function FeaturedSkeleton() {
+  return (
+    <div className="card mt-4 p-5" aria-hidden="true">
+      <div className="flex items-start gap-4 border-b border-line pb-4">
+        <div className="skeleton h-11 w-11 shrink-0 rounded-[11px]" />
+        <div className="min-w-0 flex-1">
+          <div className="skeleton h-2.5 w-24" />
+          <div className="skeleton mt-2.5 h-2.5 w-32" />
+        </div>
+      </div>
+      <div className="pt-5">
+        <div className="skeleton h-6 w-3/4" />
+        <div className="mt-5 border-t border-line pt-4">
+          <div className="skeleton h-2.5 w-20" />
+          <div className="skeleton mt-2.5 h-7 w-40" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Filter row plus card shapes, matching the board's own grid. */
+function BoardSkeleton() {
+  return (
+    <div aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading the board…</span>
+      <div className="mt-10 flex gap-2">
+        <div className="skeleton h-10 flex-1" />
+        <div className="skeleton h-10 w-32" />
+      </div>
+      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} className="card p-6">
+            <div className="skeleton h-2.5 w-24" />
+            <div className="skeleton mt-5 h-6 w-3/4" />
+            <div className="skeleton mt-8 h-8 w-32" />
+            <div className="skeleton mt-6 h-2.5 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
