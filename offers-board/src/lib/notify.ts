@@ -8,7 +8,8 @@ import {
 
 const TIMEOUT_MS = 5_000;
 const FIELD_LIMIT = 1_000;
-const EMBER = 0xff5a1f;
+// The logo's ivory: an accent stripe on the Discord card that matches the board.
+const EMBER = 0xf2ecdd;
 
 /** Applications Discord has already been told about, so nothing is posted twice. */
 const NOTIFIED_KEY = "discord_notified_v1";

@@ -56,7 +56,7 @@ export default async function BoardPage() {
             className="absolute -top-64 left-1/2 h-[30rem] w-[52rem] -translate-x-1/2 rounded-full"
             style={{
               background:
-                "radial-gradient(closest-side, rgba(255,90,31,0.32), rgba(255,90,31,0))",
+                "radial-gradient(closest-side, rgba(242,236,221,0.16), rgba(242,236,221,0))",
               filter: "blur(12px)",
             }}
           />
@@ -64,7 +64,7 @@ export default async function BoardPage() {
             className="absolute inset-0"
             style={{
               backgroundImage:
-                "linear-gradient(to right, rgba(36,39,45,0.75) 1px, transparent 1px), linear-gradient(to bottom, rgba(36,39,45,0.75) 1px, transparent 1px)",
+                "linear-gradient(to right, rgba(16,23,27,0.55) 1px, transparent 1px), linear-gradient(to bottom, rgba(16,23,27,0.55) 1px, transparent 1px)",
               backgroundSize: "72px 72px",
               maskImage:
                 "radial-gradient(ellipse at 50% 0%, black 0%, transparent 68%)",
@@ -115,7 +115,7 @@ export default async function BoardPage() {
                     className="absolute inset-x-0 top-0 h-px"
                     style={{
                       background:
-                        "linear-gradient(90deg, rgba(255,90,31,0.85), rgba(255,90,31,0))",
+                        "linear-gradient(90deg, rgba(242,236,221,0.75), rgba(242,236,221,0))",
                     }}
                   />
                   <dt className="eyebrow">{tile.label}</dt>
@@ -147,7 +147,7 @@ export default async function BoardPage() {
                   className="flex items-start gap-4 border-b border-line px-5 py-4"
                   style={{
                     backgroundImage:
-                      "linear-gradient(180deg, rgba(255,90,31,0.12), rgba(255,90,31,0))",
+                      "linear-gradient(180deg, rgba(242,236,221,0.10), rgba(242,236,221,0))",
                   }}
                 >
                   <span className="monogram" aria-hidden="true">

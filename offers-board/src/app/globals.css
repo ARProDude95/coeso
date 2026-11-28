@@ -1,12 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #0a0b0d;
-  --color-coal: #121418;
-  --color-line: #24272d;
-  --color-paper: #f3efe6;
-  --color-mute: #979eaa;
-  --color-ember: #ff5a1f;
+  /* Taken from the Coeso logo: slate #25333a behind ivory #e5dece. The ink
+     and coal surfaces are that slate stepped down for depth, the accent is
+     the ivory lifted a shade so links and labels still lead the body text. */
+  --color-ink: #25333a;
+  --color-coal: #2d3a41;
+  --color-line: #3f4d54;
+  --color-paper: #ded7c6;
+  --color-mute: #a2adaf;
+  --color-ember: #f2ecdd;
   --font-display: ui-serif, Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
@@ -51,13 +54,13 @@ body {
 
 .card-link:hover {
   border-color: color-mix(in srgb, var(--color-ember) 65%, transparent);
-  background: #15181d;
+  background: #35434b;
 }
 
 .field {
   width: 100%;
   border: 1px solid var(--color-line);
-  background: #0b0d10;
+  background: #202b31;
   border-radius: 10px;
   padding: 0.65rem 0.75rem;
   font-size: 0.875rem;
@@ -100,7 +103,7 @@ body {
 }
 
 .btn:hover {
-  border-color: #3a3f47;
+  border-color: #56656d;
 }
 
 .btn:disabled {
@@ -115,8 +118,8 @@ body {
 }
 
 .btn-primary:hover {
-  background: #ff6f3a;
-  border-color: #ff6f3a;
+  background: #fbf7ec;
+  border-color: #fbf7ec;
 }
 
 .pill {
@@ -138,7 +141,7 @@ body {
 
 .pill:hover {
   color: var(--color-paper);
-  border-color: #3a3f47;
+  border-color: #56656d;
 }
 
 .pill-active,
@@ -225,7 +228,7 @@ body {
   position: relative;
   overflow: hidden;
   border-radius: 8px;
-  background: #171a1f;
+  background: #2a363d;
 }
 
 .skeleton::after {

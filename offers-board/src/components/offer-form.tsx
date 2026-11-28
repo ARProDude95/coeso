@@ -187,7 +187,7 @@ export function OfferForm({ offer }: { offer?: Offer }) {
           type="checkbox"
           name="featured"
           defaultChecked={offer ? offer.featured === 1 : undefined}
-          className="h-4 w-4 accent-[#ff5a1f]"
+          className="h-4 w-4 accent-[#f2ecdd]"
         />
         Feature this offer at the top of the board
       </label>
